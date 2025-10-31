@@ -8,10 +8,12 @@ changelog = "2.4.0"
 intelliJPlatform = "2.9.0"
 kotlin = "2.1.20"
 kover = "0.9.1"
+mapping-io = "0.7.1"
 qodana = "2025.1.1"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+mapping-io = { group = "net.fabricmc", name = "mapping-io", version.ref = "mapping-io" }
 opentest4j = { group = "org.opentest4j", name = "opentest4j", version.ref = "opentest4j" }
 
 [plugins]
