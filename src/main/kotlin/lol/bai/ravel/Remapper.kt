@@ -1,13 +1,14 @@
 package lol.bai.ravel
 
-import com.intellij.diagnostic.PluginException
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.rootManager
 import com.intellij.openapi.util.Computable
+import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.vfs.isFile
 import com.intellij.psi.*
-import com.intellij.psi.PsiJavaCodeReferenceElement
 import com.intellij.psi.codeStyle.JavaCodeStyleManager
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
@@ -21,6 +22,10 @@ data class RemapperModel(
 )
 
 private val rawQualifierSeparators = Regex("[/$]")
+private fun replaceQualifier(raw: String): String {
+    return raw.replace(rawQualifierSeparators, ".")
+}
+
 private fun Mappings.newName(cls: ClassMapping): String? {
     var className = cls.srcName
 
@@ -29,7 +34,7 @@ private fun Mappings.newName(cls: ClassMapping): String? {
         className = mClass.getName(m.dest)
     }
 
-    return if (className == cls.srcName) null else className.replace(rawQualifierSeparators, ".")
+    return if (className == cls.srcName) null else replaceQualifier(className)
 }
 
 private fun Mappings.newName(field: FieldMapping): String? {
@@ -79,88 +84,141 @@ private fun forEachRefs(runners: MutableList<Runnable>, module: Module, elt: Psi
 }
 
 /**
- * TODO: Currently tested with WTHIT api module
+ * TODO: Currently tested with Fabric api module
+ *  - method overrides
+ *  - mixin
+ *  - access widener
  *  - kotlin
- *  - how to ignore unused references from being searched
  */
 fun remap(project: Project, model: RemapperModel) {
+    val psi = PsiManager.getInstance(project)
     val java = JavaPsiFacade.getInstance(project)
     val javaFactory = java.elementFactory
     val javaStyle = JavaCodeStyleManager.getInstance(project)
 
-    val writers = arrayListOf<Runnable>()
-    val mClasses = model.mappings.first().tree.classes
+    val mAllClasses = linkedMapOf<String, ClassMapping>()
+    model.mappings.first().tree.classes.forEach {
+        mAllClasses[replaceQualifier(it.srcName)] = it
+    }
 
-    for (module in model.modules) for (mClass in mClasses) {
-        val scope = module.getModuleWithDependenciesAndLibrariesScope(true)
-        val pClass = java.findClass(mClass.srcName.replace(rawQualifierSeparators, "."), scope) ?: continue
-        val newClassName = model.mappings.newName(mClass)
+    for (module in model.modules) {
+        val writers = arrayListOf<Runnable>()
+        val mTargetClasses = hashSetOf<String>()
+        val mTargetFields = hashMapOf<String, MutableSet<String>>()
+        val mTargetMethods = hashMapOf<String, MutableSet<String>>()
 
-        for (mField in mClass.fields) {
-            val pField = pClass.findFieldByName(mField.srcName, false) ?: continue
-            val newFieldName = model.mappings.newName(mField) ?: continue
+        module.rootManager.sourceRoots.forEach { root ->
+            VfsUtil.iterateChildrenRecursively(root, null) vf@{ vf ->
+                if (!vf.isFile) return@vf true
+                if (vf.extension != "java") return@vf true
 
-            forEachRefs(writers, module, pField) ref@{ elt ->
-                val javaRef = PsiTreeUtil.getParentOfType(elt, PsiJavaCodeReferenceElement::class.java, false)
-                if (javaRef != null) {
-                    val refElt = javaRef.referenceNameElement!!
-                    refElt.replace(javaFactory.createExpressionFromText(newFieldName, refElt))
+                val javaFile = psi.findFile(vf) ?: return@vf true
+                if (javaFile !is PsiJavaFile) return@vf true
+
+                PsiTreeUtil.processElements(javaFile, PsiJavaCodeReferenceElement::class.java) ref@{ ref ->
+                    val target = ref.resolve() ?: return@ref true
+                    val pClass = when (target) {
+                        is PsiClass -> target
+                        is PsiMember -> target.containingClass ?: return@ref true
+                        else -> return@ref true
+                    }
+
+                    val className = pClass.qualifiedName ?: return@ref true
+                    if (!mAllClasses.containsKey(className)) return@ref true
+                    mTargetClasses.add(className)
+
+                    val memberName = target.name ?: return@ref true
+                    val members = when (target) {
+                        is PsiField -> mTargetFields
+                        is PsiMethod -> mTargetMethods
+                        else -> return@ref true
+                    }
+                    members.computeIfAbsent(className) { hashSetOf() }
+                        .add(memberName)
+
+                    return@ref true
+                }
+                return@vf true
+            }
+        }
+
+        for ((oldClassName, mClass) in mAllClasses) {
+            if (!mTargetClasses.contains(oldClassName)) continue
+
+            val scope = module.getModuleWithDependenciesAndLibrariesScope(true)
+            val pClass = java.findClass(oldClassName, scope) ?: continue
+            val newClassName = model.mappings.newName(mClass)
+
+            for (mField in mClass.fields) {
+                if (mTargetFields[oldClassName]?.contains(mField.srcName) != true) continue
+
+                val pField = pClass.findFieldByName(mField.srcName, false) ?: continue
+                val newFieldName = model.mappings.newName(mField) ?: continue
+
+                forEachRefs(writers, module, pField) ref@{ elt ->
+                    val callRef = PsiTreeUtil.getParentOfType(elt, PsiJavaCodeReferenceElement::class.java, false)
+                    if (callRef != null) {
+                        val refElt = callRef.referenceNameElement!!
+                        refElt.replace(javaFactory.createExpressionFromText(newFieldName, refElt))
+                        return@ref
+                    }
+                }
+            }
+
+            for (mMethod in mClass.methods) {
+                if (mTargetMethods[oldClassName]?.contains(mMethod.srcName) != true) continue
+
+                val newMethodName = model.mappings.newName(mMethod) ?: continue
+                val (mParams, mReturn) = parseJvmDescriptor(mMethod.srcDesc!!)
+
+                method@ for (pMethod in pClass.findMethodsByName(mMethod.srcName, false)) {
+                    val pReturn = pMethod.returnType ?: PsiTypes.voidType()
+                    if (pReturn.toRaw() != mReturn) continue
+
+                    val pParams = pMethod.parameterList.parameters
+                    if (pParams.size != mParams.size) continue
+                    for (i in pParams.indices) {
+                        val pParam = pParams[i]
+                        val mParam = mParams[i]
+                        if (pParam.type.toRaw() != mParam) continue@method
+                    }
+
+                    forEachRefs(writers, module, pMethod) ref@{ elt ->
+                        val callRef = PsiTreeUtil.getParentOfType(elt, PsiJavaCodeReferenceElement::class.java, false)
+                        if (callRef != null) {
+                            val refElt = callRef.referenceNameElement!!
+                            refElt.replace(javaFactory.createExpressionFromText(newMethodName, refElt))
+                            return@ref
+                        }
+                    }
+                }
+            }
+
+            if (newClassName == null) continue
+            forEachRefs(writers, module, pClass) ref@{ elt ->
+                val callRef = PsiTreeUtil.getParentOfType(elt, PsiJavaCodeReferenceElement::class.java, false)
+                if (callRef != null) {
+                    val newRefName = newClassName.substringAfterLast('.')
+                    val refElt = callRef.referenceNameElement!!
+
+                    // TODO: Malformed type errors, seem to be only a log messages
+                    refElt.replace(javaFactory.createExpressionFromText(newRefName, refElt))
+
+                    val refQual = callRef.qualifier
+                    if (refQual != null) {
+                        val newQualName = newClassName.substringBeforeLast('.')
+                        refQual.replace(javaFactory.createExpressionFromText(newQualName, refQual))
+                    }
+
                     return@ref
                 }
             }
         }
 
-        for (mMethod in mClass.methods) {
-            val newMethodName = model.mappings.newName(mMethod) ?: continue
-            val (mParams, mReturn) = parseJvmDescriptor(mMethod.srcDesc!!)
-
-            method@ for (pMethod in pClass.findMethodsByName(mMethod.srcName, false)) {
-                val pReturn = pMethod.returnType ?: PsiTypes.voidType()
-                if (pReturn.toRaw() != mReturn) continue
-
-                val pParams = pMethod.parameterList.parameters
-                if (pParams.size != mParams.size) continue
-                for (i in pParams.indices) {
-                    val pParam = pParams[i]
-                    val mParam = mParams[i]
-                    if (pParam.type.toRaw() != mParam) continue@method
-                }
-
-                forEachRefs(writers, module, pMethod) ref@{ elt ->
-                    val javaRef = PsiTreeUtil.getParentOfType(elt, PsiJavaCodeReferenceElement::class.java, false)
-                    if (javaRef != null) {
-                        val refElt = javaRef.referenceNameElement!!
-                        refElt.replace(javaFactory.createExpressionFromText(newMethodName, refElt))
-                        return@ref
-                    }
-                }
-            }
-        }
-
-        if (newClassName == null) continue
-        forEachRefs(writers, module, pClass) ref@{ elt ->
-            val javaRef = PsiTreeUtil.getParentOfType(elt, PsiJavaCodeReferenceElement::class.java, false)
-            if (javaRef != null) {
-                val newRefName = newClassName.substringAfterLast('.')
-                val refElt = javaRef.referenceNameElement!!
-
-                // TODO: Malformed type errors, seem to be only a log messages
-                refElt.replace(javaFactory.createExpressionFromText(newRefName, refElt))
-
-                val refQual = javaRef.qualifier
-                if (refQual != null) {
-                    val newQualName = newClassName.substringBeforeLast('.')
-                    refQual.replace(javaFactory.createExpressionFromText(newQualName, refQual))
-                }
-
-                return@ref
-            }
-        }
+        WriteCommandAction.runWriteCommandAction(project, "Ravel Remapper", null, {
+            writers.forEach { it.run() }
+        })
     }
-
-    WriteCommandAction.runWriteCommandAction(project, "Ravel Remapper", null, {
-        writers.forEach { it.run() }
-    })
 }
 
 private fun PsiType.toRaw(): String {
