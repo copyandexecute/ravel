@@ -16,6 +16,8 @@ import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.components.JBList
 import com.intellij.ui.dsl.builder.bindItem
 import com.intellij.util.ui.JBUI
+import lol.bai.ravel.remapper.RemapperModel
+import lol.bai.ravel.remapper.remap
 import net.fabricmc.mappingio.MappingReader
 import net.fabricmc.mappingio.adapter.MappingSourceNsSwitch
 import net.fabricmc.mappingio.tree.MemoryMappingTree
