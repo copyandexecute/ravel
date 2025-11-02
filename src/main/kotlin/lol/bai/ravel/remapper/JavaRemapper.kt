@@ -33,7 +33,7 @@ object JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile }) {
         val mClass = mClasses[pClassName] ?: return null
         val mSignature = signature(pMethod)
         val mMethod = mClass.getMethod(pMethod.name, mSignature) ?: return null
-        val newMethodName = mappings.newName(mMethod) ?: return null
+        val newMethodName = mappings.map(mMethod) ?: return null
         return newMethodName
     }
 
@@ -48,7 +48,7 @@ object JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile }) {
                 val pClassName = pClass.qualifiedName ?: return@r
                 val mClass = mClasses[pClassName] ?: return@r
                 val mField = mClass.getField(pTarget.name, null) ?: return@r
-                val newFieldName = mappings.newName(mField) ?: return@r
+                val newFieldName = mappings.map(mField) ?: return@r
 
                 val pRefElt = pRef.referenceNameElement as PsiIdentifier
                 writers.add { pRefElt.replace(psi.createIdentifier(newFieldName)) }
@@ -66,7 +66,7 @@ object JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile }) {
             fun replaceClass(pClass: PsiClass, pClassRef: PsiJavaCodeReferenceElement) {
                 val pClassName = pClass.qualifiedName ?: return
                 val mClass = mClasses[pClassName] ?: return
-                var newClassName = mappings.newName(mClass) ?: return
+                var newClassName = mappings.map(mClass) ?: return
                 newClassName = replaceAllQualifier(newClassName)
 
                 val pRefElt = pClassRef.referenceNameElement as PsiIdentifier

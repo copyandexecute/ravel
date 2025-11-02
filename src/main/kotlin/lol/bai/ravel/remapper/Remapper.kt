@@ -34,7 +34,6 @@ private val remappers = listOf(
 
 /**
  * TODO: Currently tested with WTHIT
- *  - mixin
  *  - access widener
  *  - kotlin
  */
@@ -77,7 +76,7 @@ private val rawQualifierSeparators = Regex("[/$]")
 internal fun replaceAllQualifier(raw: String) = raw.replace(rawQualifierSeparators, ".")
 internal fun replacePkgQualifier(raw: String) = raw.replace('/', '.')
 
-internal fun Mappings.newName(cls: ClassMapping): String? {
+internal fun Mappings.map(cls: ClassMapping): String? {
     var className = cls.srcName
 
     for (m in this) {
@@ -88,21 +87,23 @@ internal fun Mappings.newName(cls: ClassMapping): String? {
     return if (className == cls.srcName) null else className
 }
 
-internal fun Mappings.newName(field: FieldMapping): String? {
+internal fun Mappings.map(field: FieldMapping): String? {
     var className = field.owner.srcName
     var fieldName = field.srcName
+    var fieldDesc = field.srcDesc
 
     for (m in this) {
         val mClass = m.tree.getClass(className) ?: return null
         val mField = mClass.getField(fieldName, null) ?: return null
         className = mClass.getName(m.dest)
         fieldName = mField.getName(m.dest)
+        fieldDesc = mField.getDesc(m.dest)
     }
 
     return if (fieldName == field.srcName) null else fieldName
 }
 
-internal fun Mappings.newName(method: MethodMapping): String? {
+internal fun Mappings.map(method: MethodMapping): String? {
     var className = method.owner.srcName
     var methodName = method.srcName
     var methodDesc = method.srcDesc
