@@ -90,14 +90,12 @@ internal fun Mappings.map(cls: ClassMapping): String? {
 internal fun Mappings.map(field: FieldMapping): String? {
     var className = field.owner.srcName
     var fieldName = field.srcName
-    var fieldDesc = field.srcDesc
 
     for (m in this) {
         val mClass = m.tree.getClass(className) ?: return null
         val mField = mClass.getField(fieldName, null) ?: return null
         className = mClass.getName(m.dest)
         fieldName = mField.getName(m.dest)
-        fieldDesc = mField.getDesc(m.dest)
     }
 
     return if (fieldName == field.srcName) null else fieldName

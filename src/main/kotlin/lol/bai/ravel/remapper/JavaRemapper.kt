@@ -1,17 +1,14 @@
 package lol.bai.ravel.remapper
 
 import com.intellij.openapi.project.Project
-import com.intellij.psi.JavaPsiFacade
-import com.intellij.psi.PsiClass
-import com.intellij.psi.PsiField
-import com.intellij.psi.PsiIdentifier
-import com.intellij.psi.PsiJavaCodeReferenceElement
-import com.intellij.psi.PsiJavaFile
-import com.intellij.psi.PsiMethod
-import com.intellij.psi.PsiPackage
-import com.intellij.psi.PsiTypes
+import com.intellij.psi.*
 
 object JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile }) {
+
+    fun comment(psi: PsiElementFactory, elt: PsiElement, comment: String) {
+        val pComment = psi.createCommentFromText("// $comment", elt)
+        elt.addBefore(pComment, elt.firstChild)
+    }
 
     fun signature(pMethod: PsiMethod): String {
         val mSignatureBuilder = StringBuilder()
