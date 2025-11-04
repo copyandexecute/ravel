@@ -1,18 +1,8 @@
-package lol.bai.ravel
+package lol.bai.ravel.mapping
 
+import lol.bai.ravel.wtf
 import net.fabricmc.mappingio.MappedElementKind
 import net.fabricmc.mappingio.MappingVisitor
-import net.fabricmc.mappingio.tree.MemoryMappingTree
-import java.nio.file.Path
-
-data class Mapping(
-    val tree: MemoryMappingTree,
-    val source: String,
-    val dest: String,
-    val path: Path,
-) {
-    override fun toString() = "$source -> $dest ($path)"
-}
 
 object MappingNsVisitor : MappingVisitor {
     lateinit var src: String
@@ -26,7 +16,6 @@ object MappingNsVisitor : MappingVisitor {
     override fun visitContent() = false
 
     // @formatter:off
-    private fun wtf(): Nothing = throw UnsupportedOperationException()
     override fun visitClass(srcName: String) = wtf()
     override fun visitField(srcName: String?, srcDesc: String?) = wtf()
     override fun visitMethod(srcName: String?, srcDesc: String?) = wtf()

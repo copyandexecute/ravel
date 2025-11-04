@@ -16,24 +16,19 @@ import com.intellij.openapi.vfs.isFile
 import com.intellij.psi.PsiManager
 import fleet.util.arrayListMultiMap
 import kotlinx.coroutines.launch
-import lol.bai.ravel.remapper.JavaRemapper
-import lol.bai.ravel.remapper.MixinRemapper
-import lol.bai.ravel.remapper.replaceAllQualifier
-import net.fabricmc.mappingio.tree.MappingTree
+import lol.bai.ravel.mapping.MappingTree
+import lol.bai.ravel.mapping.MioClassMapping
+import lol.bai.ravel.mapping.MioMappingConfig
+import lol.bai.ravel.remapper.Remapper
 
 data class RemapperModel(
-    val mappings: MutableList<Mapping> = arrayListOf(),
+    val mappings: MutableList<MioMappingConfig> = arrayListOf(),
     val modules: MutableList<Module> = arrayListOf(),
 )
 
 class RemapperAction : AnAction() {
 
     private val logger = thisLogger()
-
-    private val remappers = listOf(
-        JavaRemapper,
-        MixinRemapper,
-    )
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
@@ -61,9 +56,9 @@ class RemapperAction : AnAction() {
 
         val psi = PsiManager.getInstance(project)
 
-        val mClasses = linkedMapOf<String, MappingTree.ClassMapping>()
+        val mTree = MappingTree()
         model.mappings.first().tree.classes.forEach {
-            mClasses[replaceAllQualifier(it.srcName)] = it
+            mTree.putClass(MioClassMapping(model.mappings, it))
         }
 
         val fileWriters = readActionBlocking {
@@ -71,11 +66,11 @@ class RemapperAction : AnAction() {
             for (module in model.modules) for (root in module.rootManager.sourceRoots) VfsUtil.iterateChildrenRecursively(root, null) vf@{ vf ->
                 if (!vf.isFile) return@vf true
 
-                for (remapper in remappers) {
+                for (remapper in Remapper.instances) {
                     if (vf.extension != remapper.extension) continue
                     val pFile = remapper.caster(psi.findFile(vf)) ?: continue
                     val scope = module.getModuleWithDependenciesAndLibrariesScope(true)
-                    remapper.init(project, scope, model.mappings, mClasses, pFile) { writer -> fileWriters.put(vf, writer) }
+                    remapper.init(project, scope, mTree, pFile) { writer -> fileWriters.put(vf, writer) }
                     try {
                         remapper.remap()
                     } catch (e: Exception) {

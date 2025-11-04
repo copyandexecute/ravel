@@ -18,6 +18,8 @@ import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.components.JBList
 import com.intellij.ui.dsl.builder.bindItem
 import com.intellij.util.ui.JBUI
+import lol.bai.ravel.mapping.MappingNsVisitor
+import lol.bai.ravel.mapping.MioMappingConfig
 import net.fabricmc.mappingio.MappingReader
 import net.fabricmc.mappingio.adapter.MappingSourceNsSwitch
 import net.fabricmc.mappingio.tree.MemoryMappingTree
@@ -55,7 +57,7 @@ class RemapperDialog(
         separator()
 
         val mappingsModel = CollectionListModel(model.mappings, true)
-        val mappingsList = JBList<Mapping>().apply {
+        val mappingsList = JBList<MioMappingConfig>().apply {
             model = mappingsModel
             setEmptyText(B("dialog.remapper.empty"))
         }
@@ -99,7 +101,7 @@ class RemapperDialog(
                         else MappingSourceNsSwitch(mapping, srcNs)
 
                     MappingReader.read(path, format, visitor)
-                    mappingsModel.add(Mapping(mapping, srcNs, dstNs, path))
+                    mappingsModel.add(MioMappingConfig(mapping, srcNs, dstNs, path))
                 }
             }
             .setPreferredSize(JBUI.size(300, 500))

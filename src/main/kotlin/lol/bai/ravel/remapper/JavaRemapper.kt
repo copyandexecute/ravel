@@ -2,6 +2,7 @@ package lol.bai.ravel.remapper
 
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.psi.*
+import lol.bai.ravel.psi.jvmDesc
 
 abstract class JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile }) {
     companion object : JavaRemapper()
@@ -23,24 +24,21 @@ abstract class JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile
         pElt.addBefore(pComment, pElt.firstChild)
     }
 
-    protected fun signature(pMethod: PsiMethod): String {
-        val mSignatureBuilder = StringBuilder()
-        mSignatureBuilder.append("(")
-        for (pParam in pMethod.parameterList.parameters) {
-            mSignatureBuilder.append(pParam.type.toRaw())
-        }
-        mSignatureBuilder.append(")")
-        val pReturn = pMethod.returnType ?: PsiTypes.voidType()
-        mSignatureBuilder.append(pReturn.toRaw())
-        val mSignature = mSignatureBuilder.toString()
-        return mSignature
+    protected fun remap(pField: PsiField): String? {
+        val pClass = pField.containingClass ?: return null
+        val mClass = mTree.get(pClass) ?: return null
+
+        val fieldName = pField.name
+        val mField = mClass.getField(fieldName) ?: return null
+        val newFieldName = mField.newName ?: return null
+        return if (newFieldName == fieldName) null else newFieldName
     }
 
     protected fun findMethod(pClass: PsiClass, name: String, signature: String): PsiMethod? {
-        return pClass.findMethodsByName(name, false).find { signature(it) == signature }
+        return pClass.findMethodsByName(name, false).find { it.jvmDesc == signature }
     }
 
-    protected fun newMethodName(pSafeElt: PsiElement, pMethod: PsiMethod): String? {
+    protected fun remap(pSafeElt: PsiElement, pMethod: PsiMethod): String? {
         var pSuperMethods = pMethod.findDeepestSuperMethods()
         if (pSuperMethods.isEmpty()) pSuperMethods = arrayOf(pMethod)
 
@@ -53,10 +51,10 @@ abstract class JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile
             val key = "$pClassName#$pMethod"
             newMethodNames[key] = pMethodName
 
-            val mClass = mClasses[pClassName] ?: continue
-            val mSignature = signature(pMethod)
+            val mClass = mTree.get(pClass) ?: continue
+            val mSignature = pMethod.jvmDesc
             val mMethod = mClass.getMethod(pMethodName, mSignature) ?: continue
-            val newMethodName = mappings.remap(mMethod) ?: continue
+            val newMethodName = mMethod.newName ?: continue
             newMethodNames[key] = newMethodName
         }
 
@@ -80,7 +78,21 @@ abstract class JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile
     }
 
     override fun remap() {
-        val psi = JavaPsiFacade.getInstance(project).elementFactory
+//        pFile.process c@{ pClass: PsiClass ->
+//            val mClass = mTree.get(pClass) ?: return@c
+//            val newClassName = mClass.newFullPeriodName ?: return@c
+//            write { pClass.setName(newClassName) }
+//        }
+//
+//        pFile.process f@{ pField: PsiField ->
+//            val newFieldName = remap(pField) ?: return@f
+//            write { pField.name = newFieldName }
+//        }
+
+        pFile.process m@{ pMethod: PsiMethod ->
+            val newMethodName = remap(pMethod, pMethod) ?: return@m
+            write { pMethod.name = newMethodName }
+        }
 
         pFile.process r@{ pRef: PsiJavaCodeReferenceElement ->
             val pRefElt = pRef.referenceNameElement as? PsiIdentifier ?: return@r
@@ -88,30 +100,23 @@ abstract class JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile
             val pSafeParent = pRef.parent<PsiNamedElement>() ?: pFile
 
             if (pTarget is PsiField) {
-                val pClass = pTarget.containingClass ?: return@r
-                val pClassName = pClass.qualifiedName ?: return@r
-                val mClass = mClasses[pClassName] ?: return@r
-                val mField = mClass.getField(pTarget.name, null) ?: return@r
-                val newFieldName = mappings.remap(mField) ?: return@r
-
-                write { pRefElt.replace(psi.createIdentifier(newFieldName)) }
+                val newFieldName = remap(pTarget) ?: return@r
+                write { pRefElt.replace(factory.createIdentifier(newFieldName)) }
                 return@r
             }
 
             if (pTarget is PsiMethod) {
-                val newMethodName = newMethodName(pSafeParent, pTarget) ?: return@r
-                write { pRefElt.replace(psi.createIdentifier(newMethodName)) }
+                val newMethodName = remap(pSafeParent, pTarget) ?: return@r
+                write { pRefElt.replace(factory.createIdentifier(newMethodName)) }
                 return@r
             }
 
             fun replaceClass(pClass: PsiClass, pClassRef: PsiJavaCodeReferenceElement) {
-                val pClassName = pClass.qualifiedName ?: return
-                val mClass = mClasses[pClassName] ?: return
-                var newClassName = mappings.remap(mClass) ?: return
-                newClassName = replaceAllQualifier(newClassName)
+                val mClass = mTree.get(pClass) ?: return
+                val newClassName = mClass.newFullPeriodName ?: return
 
                 val newRefName = newClassName.substringAfterLast('.')
-                write { pRefElt.replace(psi.createIdentifier(newRefName)) }
+                write { pRefElt.replace(factory.createIdentifier(newRefName)) }
 
                 val pRefQual = pClassRef.qualifier as? PsiJavaCodeReferenceElement
                 if (pRefQual != null) {
@@ -121,17 +126,12 @@ abstract class JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile
                     } else {
                         pRefQualTarget as PsiPackage
                         val newQualName = newClassName.substringBeforeLast('.')
-                        write { pRefQual.replace(psi.createPackageReferenceElement(newQualName)) }
+                        write { pRefQual.replace(factory.createPackageReferenceElement(newQualName)) }
                     }
                 }
             }
 
             if (pTarget is PsiClass) replaceClass(pTarget, pRef)
-        }
-
-        pFile.process m@{ pMethod: PsiMethod ->
-            val newMethodName = newMethodName(pMethod, pMethod) ?: return@m
-            write { pMethod.name = newMethodName }
         }
     }
 
