@@ -6,6 +6,7 @@ import fleet.util.hashSetMultiMap
 import lol.bai.ravel.decapitalize
 import lol.bai.ravel.mapping.ClassMapping
 import lol.bai.ravel.psi.jvmDesc
+import lol.bai.ravel.psi.jvmName
 
 @Suppress("ConstPropertyName")
 object MixinRemapper : JavaRemapper() {
@@ -117,7 +118,8 @@ object MixinRemapper : JavaRemapper() {
             if (!isRemapped(pAnnotation)) return@a
 
             fun remapTarget(pTarget: PsiLiteralExpression) {
-                val target = pTarget.value as String
+                var target = pTarget.value as String
+                target = target.replace('.', '/')
                 mixinTargets.put(className, target)
 
                 val mTargetClass = mTree.getClass(target) ?: return
@@ -145,7 +147,7 @@ object MixinRemapper : JavaRemapper() {
 
                 if (type is PsiClassType) {
                     val pTargetClass = type.resolve() ?: return warnCantResolve()
-                    val targetClassName = pTargetClass.qualifiedName ?: return warnCantResolve()
+                    val targetClassName = pTargetClass.jvmName ?: return warnCantResolve()
                     mixinTargets.put(className, targetClassName)
                 }
             }
@@ -176,7 +178,7 @@ object MixinRemapper : JavaRemapper() {
 
         fun targetClass(pMember: PsiMember): Pair<PsiClass?, ClassMapping?>? {
             val targetClassName = targetClassName(pMember) ?: return null
-            val pTargetClass = java.findClass(targetClassName, scope)
+            val pTargetClass = findClass(targetClassName)
             val mTargetClass = mTree.getClass(targetClassName)
             if (pTargetClass == null && mTargetClass == null) return null
             return pTargetClass to mTargetClass
@@ -317,12 +319,12 @@ object MixinRemapper : JavaRemapper() {
                     logger.warn("$className#$methodName: target method $targetMethodName is ambiguous")
                 }
 
-                val newTargetMethodNames = hashMapOf<String, String>()
+                val newTargetMethodNames = linkedMapOf<String, String>()
                 for (targetClassName in targetClassNames) {
                     val key = "${targetClassName}#${targetMethodName}"
                     newTargetMethodNames[key] = targetMethodName
 
-                    val pTargetClass = java.findClass(targetClassName, scope)
+                    val pTargetClass = findClass(targetClassName)
                     if (pTargetClass != null) {
                         var newTargetMethodName: String? = null
                         if (targetMethodDesc.isNotEmpty()) {
@@ -344,8 +346,7 @@ object MixinRemapper : JavaRemapper() {
                             val mTargetMethod = mTargetClass.getMethod(targetMethodName, targetMethodDesc) ?: return notFound()
                             newTargetMethodName = mTargetMethod.newName ?: targetMethodName
                         } else {
-                            for (mTargetMethod in mTargetClass.methods) {
-                                if (mTargetMethod.oldName != targetMethodName) continue
+                            for (mTargetMethod in mTargetClass.getMethods(targetMethodName)) {
                                 val newTargetMethodName0 = mTargetMethod.newName ?: targetMethodName
                                 if (newTargetMethodName != null && newTargetMethodName != newTargetMethodName0) return ambiguous()
                                 newTargetMethodName = newTargetMethodName0

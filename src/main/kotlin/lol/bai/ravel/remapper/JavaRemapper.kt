@@ -2,6 +2,7 @@ package lol.bai.ravel.remapper
 
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.psi.*
+import lol.bai.ravel.mapping.rawQualifierSeparators
 import lol.bai.ravel.psi.jvmDesc
 
 abstract class JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile }) {
@@ -18,10 +19,13 @@ abstract class JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile
     }
 
     override fun comment(pElt: PsiElement, comment: String) {
-        val formatted = comment.split('\n').joinToString(prefix = "// ", separator = "\n// ")
-        val pComment = factory.createCommentFromText(formatted, pElt)
-
-        pElt.addBefore(pComment, pElt.firstChild)
+        var pAnchor: PsiElement? = null
+        comment.split('\n').forEach { line ->
+            val pComment = factory.createCommentFromText("// $line", pElt)
+            pAnchor =
+                if (pAnchor == null) pElt.addBefore(pComment, pElt.firstChild)
+                else pElt.addAfter(pComment, pAnchor)
+        }
     }
 
     protected fun remap(pField: PsiField): String? {
@@ -34,6 +38,10 @@ abstract class JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile
         return if (newFieldName == fieldName) null else newFieldName
     }
 
+    protected fun findClass(jvmName: String): PsiClass? {
+        return java.findClass(jvmName.replace(rawQualifierSeparators, "."), scope)
+    }
+
     protected fun findMethod(pClass: PsiClass, name: String, signature: String): PsiMethod? {
         return pClass.findMethodsByName(name, false).find { it.jvmDesc == signature }
     }
@@ -42,7 +50,7 @@ abstract class JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile
         var pSuperMethods = pMethod.findDeepestSuperMethods()
         if (pSuperMethods.isEmpty()) pSuperMethods = arrayOf(pMethod)
 
-        val newMethodNames = hashMapOf<String, String>()
+        val newMethodNames = linkedMapOf<String, String>()
         for (pMethod in pSuperMethods) {
             val pClass = pMethod.containingClass ?: continue
             val pClassName = pClass.qualifiedName ?: continue
@@ -96,6 +104,32 @@ abstract class JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile
 
         pFile.process r@{ pRef: PsiJavaCodeReferenceElement ->
             val pRefElt = pRef.referenceNameElement as? PsiIdentifier ?: return@r
+
+            // TODO: solve by looking at usages, maybe on it's own pFile.process after this
+            if (pRef is PsiImportStaticReferenceElement) {
+                val pStatement = pRef.parent<PsiImportStaticStatement>() ?: return@r
+                val pClass = pRef.classReference.resolve() as? PsiClass ?: return@r
+                val memberName = pRefElt.text
+
+                val pField = pClass.findFieldByName(memberName, false)
+                val pMethods = pClass.findMethodsByName(memberName, false)
+
+                val newMemberNames = linkedMapOf<String, String>()
+                if (pField != null) newMemberNames["field " + pField.name] = mTree.get(pField)?.newName ?: pField.name
+                for (pMethod in pMethods) newMemberNames["method " + pMethod.name + pMethod.jvmDesc] = mTree.get(pMethod)?.newName ?: pMethod.name
+
+                val uniqueNewMemberNames = newMemberNames.values.toSet()
+                if (uniqueNewMemberNames.size != 1) {
+                    logger.warn("ambiguous static import, members with name $memberName have different new names")
+                    val comment = newMemberNames.map { (k, v) -> "$k -> $v" }.joinToString(separator = "\n")
+                    write { comment(pStatement, "TODO(Ravel): ambiguous static import, members with name $memberName have different new names\n$comment") }
+                    return@r
+                }
+
+                write { pRefElt.replace(factory.createIdentifier(uniqueNewMemberNames.first())) }
+                return@r
+            }
+
             val pTarget = pRef.resolve() ?: return@r
             val pSafeParent = pRef.parent<PsiNamedElement>() ?: pFile
 

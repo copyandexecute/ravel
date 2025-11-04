@@ -45,7 +45,7 @@ class MappingTree {
     }
 }
 
-private val rawQualifierSeparators = Regex("[/$]")
+val rawQualifierSeparators = Regex("[/$]")
 abstract class ClassMapping : Mapping {
     val newFullPeriodName get() = newName?.replace(rawQualifierSeparators, ".")
     val newPkgPeriodName get() = newName?.replace('/', '.')
@@ -74,6 +74,7 @@ abstract class ClassMapping : Mapping {
 
     protected open fun getMethodImpl(name: String, desc: String): MethodMapping? = null
     fun getMethod(name: String, desc: String) = methodCache.getOrPut("${name}${desc}") { getMethodImpl(name, desc) }
+    fun getMethods(name: String) = methods.filter { it.oldName == name }
     fun putMethod(mapping: MethodMapping) = methodCache.put("${mapping.oldName}${mapping.oldDesc}", mapping)
     fun putMethod(oldName: String, oldDesc: String, newName: String?) = putMethod(BasicMethodMapping(oldName, oldDesc, newName))
 }
