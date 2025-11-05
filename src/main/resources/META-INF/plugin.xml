@@ -13,21 +13,21 @@
     </extensions>
 
     <actions>
-        <action id="lol.bai.ravel.RemapperAction"
-                class="lol.bai.ravel.RemapperAction">
+        <action id="lol.bai.ravel.ui.RemapperAction"
+                class="lol.bai.ravel.ui.RemapperAction">
             <add-to-group group-id="RefactoringMenu"/>
         </action>
 
-        <action id="lol.bai.ravel.RemapperDialog$MarkAllAction"
-                class="lol.bai.ravel.RemapperDialog$MarkAllAction"
+        <action id="lol.bai.ravel.ui.RemapperDialog$MarkAllAction"
+                class="lol.bai.ravel.ui.RemapperDialog$MarkAllAction"
                 icon="AllIcons.Actions.AddList"/>
 
-        <action id="lol.bai.ravel.RemapperDialog$MarkAction"
-                class="lol.bai.ravel.RemapperDialog$MarkAction"
+        <action id="lol.bai.ravel.ui.RemapperDialog$MarkAction"
+                class="lol.bai.ravel.ui.RemapperDialog$MarkAction"
                 icon="AllIcons.General.Add"/>
 
-        <action id="lol.bai.ravel.RemapperDialog$UnMarkAction"
-                class="lol.bai.ravel.RemapperDialog$UnMarkAction"
+        <action id="lol.bai.ravel.ui.RemapperDialog$UnMarkAction"
+                class="lol.bai.ravel.ui.RemapperDialog$UnMarkAction"
                 icon="AllIcons.General.Remove"/>
     </actions>
 </idea-plugin>

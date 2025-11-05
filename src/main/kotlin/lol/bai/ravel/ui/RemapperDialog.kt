@@ -1,4 +1,4 @@
-package lol.bai.ravel
+package lol.bai.ravel.ui
 
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -20,21 +20,22 @@ import com.intellij.ui.dsl.builder.bindItem
 import com.intellij.util.ui.JBUI
 import lol.bai.ravel.mapping.MappingNsVisitor
 import lol.bai.ravel.mapping.MioMappingConfig
+import lol.bai.ravel.ui.RemapperDialog.ModuleList
+import lol.bai.ravel.util.A
+import lol.bai.ravel.util.B
 import net.fabricmc.mappingio.MappingReader
 import net.fabricmc.mappingio.adapter.MappingSourceNsSwitch
 import net.fabricmc.mappingio.tree.MemoryMappingTree
 import org.jetbrains.annotations.NonNls
 import com.intellij.ui.dsl.builder.panel as rootPanel
 
+private val modelData = DataKey.create<RemapperModel>("RemapperDialogModel")
+private val modulesData = DataKey.create<ModuleList>("RemapperDialogTree")
+
 class RemapperDialog(
     val project: Project,
     val model: RemapperModel
 ) : DialogWrapper(project), DataProvider {
-
-    companion object {
-        val modelData = DataKey.create<RemapperModel>("RemapperDialogModel")
-        val modulesData = DataKey.create<ModuleList>("RemapperDialogTree")
-    }
 
     lateinit var modules: ModuleList
 
@@ -109,7 +110,7 @@ class RemapperDialog(
 
         // TODO: selected module indicator
         val moduleModel = CollectionListModel<ModuleEntry>()
-        ModuleManager.getInstance(project).modules.sortedBy { it.name }.forEach { module ->
+        ModuleManager.Companion.getInstance(project).modules.sortedBy { it.name }.forEach { module ->
             if (module.rootManager.sourceRoots.isEmpty()) return@forEach
             moduleModel.add(ModuleEntry(module))
         }

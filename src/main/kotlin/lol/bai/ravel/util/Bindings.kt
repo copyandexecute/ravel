@@ -1,6 +1,6 @@
 @file:Suppress("FunctionName")
 
-package lol.bai.ravel
+package lol.bai.ravel.util
 
 import com.intellij.DynamicBundle
 import com.intellij.openapi.actionSystem.ActionManager
