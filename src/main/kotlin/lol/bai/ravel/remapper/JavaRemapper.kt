@@ -89,16 +89,17 @@ abstract class JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile
     }
 
     override fun remap() {
-//        pFile.process c@{ pClass: PsiClass ->
-//            val mClass = mTree.get(pClass) ?: return@c
-//            val newClassName = mClass.newFullPeriodName ?: return@c
-//            write { pClass.setName(newClassName) }
-//        }
-//
-//        pFile.process f@{ pField: PsiField ->
-//            val newFieldName = remap(pField) ?: return@f
-//            write { pField.name = newFieldName }
-//        }
+        // TODO: solve in-project class remapping
+        // pFile.process c@{ pClass: PsiClass ->
+        //     val mClass = mTree.get(pClass) ?: return@c
+        //     val newClassName = mClass.newFullPeriodName ?: return@c
+        //     write { pClass.setName(newClassName) }
+        // }
+
+        pFile.process f@{ pField: PsiField ->
+            val newFieldName = remap(pField) ?: return@f
+            write { pField.name = newFieldName }
+        }
 
         pFile.process m@{ pMethod: PsiMethod ->
             val newMethodName = remap(pMethod, pMethod) ?: return@m

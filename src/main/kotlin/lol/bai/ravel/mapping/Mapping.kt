@@ -12,9 +12,15 @@ val rawQualifierSeparators = Regex("[/$]")
 
 class MappingTree {
     private val classes = linkedMapOf<String, ClassMapping>()
-    fun putClass(mapping: ClassMapping) = classes.put(mapping.oldName, mapping)
-    fun getClass(name: String) = classes[name]
 
+    fun getClass(name: String) = classes[name]
+    fun getOrPutClass(oldName: String, newName: String?) = classes.getOrPut(oldName) { BasicClassMapping(oldName, newName) }
+    fun putClass(oldName: String, newName: String?) = putClass(BasicClassMapping(oldName, newName))
+    fun putClass(mapping: ClassMapping) {
+        classes[mapping.oldName] = mapping
+    }
+
+    fun getOrPut(pClass: PsiClass) = getOrPutClass(pClass.jvmName!!, pClass.jvmName)
     fun get(pClass: PsiClass): ClassMapping? {
         val classJvmName = pClass.jvmName ?: return null
         return getClass(classJvmName)

@@ -592,33 +592,10 @@ object MixinRemapper : JavaRemapper() {
             if (newMemberName == null) return@a
             if (memberNameHasPrefix) newMemberName = prefix + newMemberName
 
-            fun resolveReferences(pRefFile: PsiJavaFile) = pRefFile.process r@{ pRef: PsiJavaCodeReferenceElement ->
-                val pTarget = pRef.resolve() ?: return@r
-                if (pTarget != pMember) return@r
+            val mClass = mTree.getOrPut(pClass)
+            if (pMember is PsiField) mClass.putField(pMember.name, newMemberName)
+            else if (pMember is PsiMethod) mClass.putMethod(pMember.name, pMember.jvmDesc, newMemberName)
 
-                val pRefElt = pRef.referenceNameElement as PsiIdentifier
-                write { pRefElt.replace(factory.createIdentifier(newMemberName)) }
-            }
-
-            val pModifiers = pMember.modifierList!!
-            if (pModifiers.hasModifierProperty(PsiModifier.PRIVATE)) {
-                resolveReferences(pFile)
-            } else if (pModifiers.hasModifierProperty(PsiModifier.PACKAGE_LOCAL)) {
-                val siblings = pFile.virtualFile!!.parent.children!!
-                val psiManager = PsiManager.getInstance(project)
-                for (vf in siblings) {
-                    if (vf.extension != "java") continue
-                    val pRefFile = psiManager.findFile(vf)
-                    if (pRefFile !is PsiJavaFile) continue
-                    resolveReferences(pRefFile)
-                }
-            } else {
-                write { comment(pMember, "TODO(Ravel): only private and package-private shadow is supported") }
-                logger.warn("$className#$memberName: only private and package-private shadow is supported")
-                return@a
-            }
-
-            write { pMember.setName(newMemberName) }
             return@a
         }
 
