@@ -4,19 +4,17 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.search.GlobalSearchScope
 import lol.bai.ravel.mapping.MappingTree
-import org.intellij.lang.annotations.Language
 
 abstract class Remapper(
-    @Language("regexp") regex: String
+    val regex: Regex
 ) {
     companion object {
-        val instances = listOf<Remapper>(
-            MixinRemapper,
-            JavaRemapper
+        fun createInstances() = listOf(
+            MixinRemapper(),
+            JavaRemapper(),
+            ClassTweakerRemapper()
         )
     }
-
-    val regex = regex.toRegex()
 
     protected lateinit var project: Project
     protected lateinit var scope: GlobalSearchScope

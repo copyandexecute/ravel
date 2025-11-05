@@ -97,7 +97,7 @@ class RemapperAction : AnAction() {
                 readActionBlocking r@{
                     if (!vf.isFile) return@r true
 
-                    for (remapper in Remapper.instances) {
+                    for (remapper in Remapper.createInstances()) {
                         if (!remapper.regex.matches(vf.name)) continue
 
                         val scope = module.getModuleWithDependenciesAndLibrariesScope(true)

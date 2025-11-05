@@ -4,12 +4,11 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.util.PsiTreeUtil
-import org.intellij.lang.annotations.Language
 
 typealias Writer = (() -> Unit) -> Unit
 
 abstract class PsiRemapper<F : PsiFile>(
-    @Language("regexp") regex: String,
+    regex: Regex,
     val caster: (PsiFile?) -> F?,
 ): Remapper(regex) {
 

@@ -8,9 +8,8 @@ import lol.bai.ravel.mapping.rawQualifierSeparators
 import lol.bai.ravel.psi.implicitly
 import lol.bai.ravel.psi.jvmDesc
 
-abstract class JavaRemapper : PsiRemapper<PsiJavaFile>(".*\\.java", { it as? PsiJavaFile }) {
-    companion object : JavaRemapper()
-
+private val regex = Regex(".*\\.java")
+open class JavaRemapper : PsiRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }) {
     private val logger = thisLogger()
 
     protected lateinit var java: JavaPsiFacade
