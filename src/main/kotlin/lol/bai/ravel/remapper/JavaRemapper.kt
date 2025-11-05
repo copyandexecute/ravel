@@ -2,6 +2,9 @@ package lol.bai.ravel.remapper
 
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.psi.*
+import com.intellij.psi.javadoc.PsiDocTag
+import com.intellij.psi.javadoc.PsiDocToken
+import com.intellij.psi.util.elementType
 import lol.bai.ravel.mapping.rawQualifierSeparators
 import lol.bai.ravel.psi.jvmDesc
 
@@ -166,6 +169,32 @@ abstract class JavaRemapper : Remapper<PsiJavaFile>("java", { it as? PsiJavaFile
             }
 
             if (pTarget is PsiClass) replaceClass(pTarget, pRef)
+        }
+
+        pFile.process d@{ pDocTag: PsiDocTag ->
+            val pValue = pDocTag.valueElement ?: return@d
+            val pRef = pValue.reference?.resolve() ?: return@d
+
+            fun remapValueToken(oldName: String, newName: String) = pRef.process t@{ pDocToken: PsiDocToken ->
+                if (pDocToken.elementType != JavaDocTokenType.DOC_TAG_VALUE_TOKEN) return@t
+                if (!pDocToken.textMatches(oldName)) return@t
+                write { pDocToken.replace(factory.createDummyHolder(newName, JavaDocTokenType.DOC_TAG_VALUE_TOKEN, pDocToken)) }
+            }
+
+            if (pRef is PsiField) {
+                val oldFieldName = pRef.name
+                val newFieldName = remap(pRef) ?: return@d
+                remapValueToken(oldFieldName, newFieldName)
+                return@d
+            }
+
+            if (pRef is PsiMethod) {
+                val pSafeElt = pDocTag.parent<PsiMember>() ?: pFile
+                val oldFieldName = pRef.name
+                val newFieldName = remap(pSafeElt, pRef) ?: return@d
+                remapValueToken(oldFieldName, newFieldName)
+                return@d
+            }
         }
     }
 
