@@ -8,14 +8,18 @@ import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
+import com.intellij.openapi.module.ModuleType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.rootManager
 import com.intellij.openapi.ui.DialogBuilder
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
 import com.intellij.ui.CollectionListModel
+import com.intellij.ui.ColoredListCellRenderer
+import com.intellij.ui.FileColorManager
 import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.components.JBList
+import com.intellij.ui.dsl.builder.LabelPosition
 import com.intellij.ui.dsl.builder.bindItem
 import com.intellij.util.ui.JBUI
 import lol.bai.ravel.mapping.MappingNsVisitor
@@ -27,17 +31,23 @@ import net.fabricmc.mappingio.MappingReader
 import net.fabricmc.mappingio.adapter.MappingSourceNsSwitch
 import net.fabricmc.mappingio.tree.MemoryMappingTree
 import org.jetbrains.annotations.NonNls
+import javax.swing.JLabel
+import javax.swing.JList
 import com.intellij.ui.dsl.builder.panel as rootPanel
 
-private val modelData = DataKey.create<RemapperModel>("RemapperDialogModel")
-private val modulesData = DataKey.create<ModuleList>("RemapperDialogTree")
+private val modelDataKey = DataKey.create<RemapperModel>("RemapperDialogModel")
+private val modulesLabelKey = DataKey.create<JLabel>("RemapperDialogModulesLabel")
+private val modulesListKey = DataKey.create<ModuleList>("RemapperDialogModulesList")
 
 class RemapperDialog(
     val project: Project,
     val model: RemapperModel
 ) : DialogWrapper(project), DataProvider {
 
-    lateinit var modules: ModuleList
+    val fileColor = FileColorManager.getInstance(project)!!
+
+    val modulesLabel = JLabel(B("dialog.remapper.modules", 0, 0))
+    lateinit var moduleList: ModuleList
 
     init {
         title = B("dialog.remapper.title")
@@ -46,17 +56,14 @@ class RemapperDialog(
 
     override fun getData(dataId: @NonNls String): Any? {
         return when (dataId) {
-            modelData.name -> model
-            modulesData.name -> modules
+            modelDataKey.name -> model
+            modulesLabelKey.name -> modulesLabel
+            modulesListKey.name -> moduleList
             else -> null
         }
     }
 
     override fun createCenterPanel() = rootPanel {
-        // TODO: preset saving
-        row(B("dialog.remapper.preset")) { textField() }
-        separator()
-
         val mappingsModel = CollectionListModel(model.mappings, true)
         val mappingsList = JBList<MioMappingConfig>().apply {
             model = mappingsModel
@@ -108,15 +115,14 @@ class RemapperDialog(
             .setPreferredSize(JBUI.size(300, 500))
             .createPanel()
 
-        // TODO: selected module indicator
         val moduleModel = CollectionListModel<ModuleEntry>()
-        ModuleManager.Companion.getInstance(project).modules.sortedBy { it.name }.forEach { module ->
+        ModuleManager.getInstance(project).modules.sortedBy { it.name }.forEach { module ->
             if (module.rootManager.sourceRoots.isEmpty()) return@forEach
-            moduleModel.add(ModuleEntry(module))
+            moduleModel.add(ModuleEntry(module, false))
         }
-        modules = ModuleList(moduleModel)
-        val projectT = ToolbarDecorator
-            .createDecorator(modules)
+        moduleList = ModuleList(moduleModel)
+        val modules = ToolbarDecorator
+            .createDecorator(moduleList)
             .disableAddAction()
             .disableRemoveAction()
             .disableUpDownActions()
@@ -127,55 +133,72 @@ class RemapperDialog(
             .createPanel()
 
         row {
-            panel {
-                row { label(B("dialog.remapper.mappings")) }
-                row { cell(steps) }
-            }
-
-            panel {
-                row { label(B("dialog.remapper.modules")) }
-                row { cell(projectT) }
-            }
+            cell(steps).label(B("dialog.remapper.mappings"), LabelPosition.TOP)
+            cell(modules).label(modulesLabel, LabelPosition.TOP)
         }
     }
 
-    class ModuleList(
+    inner class ModuleList(
         val model: CollectionListModel<ModuleEntry>
     ) : JBList<ModuleEntry>() {
         init {
             super.model = model
+            cellRenderer = ModuleCellRenderer()
         }
     }
 
-    data class ModuleEntry(val module: Module) {
-        override fun toString(): String = module.name
+    data class ModuleEntry(
+        val module: Module,
+        var selected: Boolean
+    )
+
+    inner class ModuleCellRenderer : ColoredListCellRenderer<ModuleEntry>() {
+        override fun customizeCellRenderer(list: JList<out ModuleEntry>, value: ModuleEntry, index: Int, selected: Boolean, hasFocus: Boolean) {
+            append(value.module.name)
+            icon = ModuleType.get(value.module).icon
+            if (value.selected) background = fileColor.getColor("Green")
+            if (selected) background = JBUI.CurrentTheme.List.background(true, hasFocus)
+        }
     }
 
     abstract class ModuleAction : AnAction() {
         abstract fun act(model: RemapperModel, modules: ModuleList)
 
         override fun actionPerformed(e: AnActionEvent) {
-            val model = e.getData(modelData) ?: return
-            val modules = e.getData(modulesData) ?: return
+            val model = e.getData(modelDataKey) ?: return
+            val modules = e.getData(modulesListKey) ?: return
+            val modulesLabel = e.getData(modulesLabelKey) ?: return
+
             act(model, modules)
+            modulesLabel.text = B("dialog.remapper.modules", model.modules.size, modules.model.size)
         }
     }
 
     class MarkAllAction : ModuleAction() {
         override fun act(model: RemapperModel, modules: ModuleList) {
-            model.modules.addAll(modules.model.items.map { it.module })
+            modules.model.items.forEach {
+                model.modules.add(it.module)
+                it.selected = true
+            }
+            modules.repaint()
         }
     }
 
     class MarkAction : ModuleAction() {
         override fun act(model: RemapperModel, modules: ModuleList) {
-            model.modules.addAll(modules.selectedValuesList.map { it.module })
+            modules.selectedValuesList.forEach {
+                model.modules.add(it.module)
+                it.selected = true
+            }
         }
     }
 
     class UnMarkAction : ModuleAction() {
         override fun act(model: RemapperModel, modules: ModuleList) {
-            model.modules.removeAll(modules.selectedValuesList.map { it.module })
+            modules.selectedValuesList.forEach {
+                model.modules.remove(it.module)
+                it.selected = false
+            }
         }
     }
 

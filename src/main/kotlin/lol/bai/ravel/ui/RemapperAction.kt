@@ -46,8 +46,9 @@ class RemapperAction : AnAction() {
         val project = e.project ?: return
         val model = RemapperModel()
         val ok = RemapperDialog(project, model).showAndGet()
-        if (ok) currentThreadCoroutineScope().launch {
-            remap(project, model)
+
+        if (ok && model.mappings.isNotEmpty() && model.modules.isNotEmpty()) {
+            currentThreadCoroutineScope().launch { remap(project, model) }
         }
     }
 
