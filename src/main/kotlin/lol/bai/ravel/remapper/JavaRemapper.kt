@@ -7,8 +7,10 @@ import fleet.util.Multimap
 import lol.bai.ravel.mapping.rawQualifierSeparators
 import lol.bai.ravel.psi.implicitly
 import lol.bai.ravel.psi.jvmDesc
+import lol.bai.ravel.psi.jvmRaw
 
 private val regex = Regex(".*\\.java")
+
 open class JavaRemapper : PsiRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }) {
     private val logger = thisLogger()
 
@@ -105,6 +107,40 @@ open class JavaRemapper : PsiRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
         pFile.process m@{ pMethod: PsiMethod ->
             val newMethodName = remap(pMethod, pMethod) ?: return@m
             write { pMethod.name = newMethodName }
+        }
+
+        pFile.process r@{ pRecordComponent: PsiRecordComponent ->
+            val pClass = pRecordComponent.containingClass ?: return@r
+            val className = pClass.qualifiedName ?: return@r
+
+            val recordComponentName = pRecordComponent.name
+            val recordComponentDesc = pRecordComponent.type.jvmRaw
+
+            val getterDesc = "()${recordComponentDesc}"
+            val pGetter = pClass.findMethodsByName(recordComponentName, true)
+
+            val newGetterName = linkedMapOf<String, String>()
+            for (pGetter in pGetter) {
+                val pGetterClass = pGetter.containingClass ?: continue
+                if (pGetterClass == pClass) continue
+                if (pGetter.jvmDesc != getterDesc) continue
+                val key = pGetterClass.name + "#" + pGetter.name
+                newGetterName[key] = remap(pClass, pGetter) ?: pGetter.name
+            }
+
+            if (newGetterName.isEmpty()) return@r
+
+            val uniqueNewGetterNames = newGetterName.values.toSet()
+            if (uniqueNewGetterNames.size != 1) {
+                logger.warn("$className: record component '$recordComponentName' overrides methods with different new names")
+                val comment = newGetterName.map { (k, v) -> "$k -> $v" }.joinToString(separator = "\n")
+                write { comment(pClass, "TODO(Ravel): record component '$recordComponentName' overrides methods with different new names\n$comment") }
+                return@r
+            }
+
+            val uniqueNewGetterName = uniqueNewGetterNames.first()
+            mTree.getOrPut(pClass).putField(recordComponentName, uniqueNewGetterName)
+            write { pRecordComponent.name = uniqueNewGetterName }
         }
 
         val pStaticImportUsages = Multimap<String, PsiMember> { LinkedHashSet() }
