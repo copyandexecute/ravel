@@ -7,6 +7,7 @@ import fleet.util.Multimap
 import lol.bai.ravel.mapping.rawQualifierSeparators
 import lol.bai.ravel.psi.implicitly
 import lol.bai.ravel.psi.jvmDesc
+import lol.bai.ravel.psi.jvmName
 import lol.bai.ravel.psi.jvmRaw
 
 private val regex = Regex(".*\\.java")
@@ -92,6 +93,13 @@ open class JavaRemapper : PsiRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
     }
 
     override fun remap() {
+        val nonFqnClassNames = hashMapOf<String, String>()
+        pFile.process c@{ pClass: PsiClass ->
+            val className = pClass.name ?: return@c
+            val classJvmName = pClass.jvmName ?: return@c
+            nonFqnClassNames[className] = classJvmName
+        }
+
         // TODO: solve in-project class remapping
         // pFile.process c@{ pClass: PsiClass ->
         //     val mClass = mTree.get(pClass) ?: return@c
@@ -146,7 +154,7 @@ open class JavaRemapper : PsiRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
         val pStaticImportUsages = Multimap<String, PsiMember> { LinkedHashSet() }
         pFile.process r@{ pRef: PsiJavaCodeReferenceElement ->
             if (pRef is PsiImportStaticReferenceElement) return@r
-            val pRefElt = pRef.referenceNameElement as? PsiIdentifier ?: return@r
+            val pRefId = pRef.referenceNameElement as? PsiIdentifier ?: return@r
 
             val pTarget = pRef.resolve() ?: return@r
             val pSafeParent = pRef.parent<PsiNamedElement>() ?: pFile
@@ -156,7 +164,7 @@ open class JavaRemapper : PsiRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
                     pStaticImportUsages.put(pTarget.name, pTarget)
                 }
                 val newFieldName = remap(pTarget) ?: return@r
-                write { pRefElt.replace(factory.createIdentifier(newFieldName)) }
+                write { pRefId.replace(factory.createIdentifier(newFieldName)) }
                 return@r
             }
 
@@ -165,38 +173,48 @@ open class JavaRemapper : PsiRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
                     pStaticImportUsages.put(pTarget.name, pTarget)
                 }
                 val newMethodName = remap(pSafeParent, pTarget) ?: return@r
-                write { pRefElt.replace(factory.createIdentifier(newMethodName)) }
+                write { pRefId.replace(factory.createIdentifier(newMethodName)) }
                 return@r
             }
 
             fun replaceClass(pClass: PsiClass, pClassRef: PsiJavaCodeReferenceElement) {
+                val pClassRefId = pClassRef.referenceNameElement as? PsiIdentifier ?: return
                 val mClass = mTree.get(pClass) ?: return
+                val newJvmClassName = mClass.newName ?: return
                 val newClassName = mClass.newFullPeriodName ?: return
-
                 val newRefName = newClassName.substringAfterLast('.')
-                write { pRefElt.replace(factory.createIdentifier(newRefName)) }
 
                 val pRefQual = pClassRef.qualifier as? PsiJavaCodeReferenceElement
                 if (pRefQual != null) {
                     val pRefQualTarget = pRefQual.resolve()
                     if (pRefQualTarget is PsiClass) {
                         replaceClass(pRefQualTarget, pRefQual)
+                        write { pClassRefId.replace(factory.createIdentifier(newRefName)) }
+                        return
                     } else {
                         pRefQualTarget as PsiPackage
                         val newQualName = newClassName.substringBeforeLast('.')
                         write { pRefQual.replace(factory.createPackageReferenceElement(newQualName)) }
                     }
                 }
+
+                if (nonFqnClassNames.contains(newRefName) && nonFqnClassNames[newRefName] != newJvmClassName) {
+                    write { pClassRef.replace(factory.createReferenceFromText(newClassName, pClassRef)) }
+                    return
+                }
+
+                nonFqnClassNames[newRefName] = newJvmClassName
+                write { pClassRefId.replace(factory.createIdentifier(newRefName)) }
             }
 
             if (pTarget is PsiClass) replaceClass(pTarget, pRef)
         }
 
         pFile.process r@{ pRef: PsiImportStaticReferenceElement ->
-            val pRefElt = pRef.referenceNameElement as? PsiIdentifier ?: return@r
+            val pRefId = pRef.referenceNameElement as? PsiIdentifier ?: return@r
             val pStatement = pRef.parent<PsiImportStaticStatement>() ?: return@r
             val pClass = pRef.classReference.resolve() as? PsiClass ?: return@r
-            val memberName = pRefElt.text
+            val memberName = pRefId.text
 
             val pUsages = pStaticImportUsages[memberName].ifEmpty {
                 val pMembers = arrayListOf<PsiMember>()
@@ -220,7 +238,7 @@ open class JavaRemapper : PsiRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
                 return@r
             }
 
-            write { pRefElt.replace(factory.createIdentifier(uniqueNewMemberNames.first())) }
+            write { pRefId.replace(factory.createIdentifier(uniqueNewMemberNames.first())) }
             return@r
         }
 
