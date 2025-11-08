@@ -2,6 +2,10 @@
 
 # ravel Changelog
 
-## [Unreleased]
+## 0.1.1
+### Fixed
+- Removed usage of internal fleet.util.Multimap
+
+## 0.1.0
 ### Added
-- Initial scaffold created from [IntelliJ Platform Plugin Template](https://github.com/JetBrains/intellij-platform-plugin-template)
+- Initial release
