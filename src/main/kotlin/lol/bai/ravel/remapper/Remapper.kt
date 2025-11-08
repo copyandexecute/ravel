@@ -1,19 +1,26 @@
 package lol.bai.ravel.remapper
 
+import com.intellij.openapi.extensions.ExtensionPointName
+import com.intellij.openapi.extensions.RequiredElement
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.util.xmlb.annotations.Attribute
 import lol.bai.ravel.mapping.MappingTree
+
+private val EP = ExtensionPointName<RemapperBean>("lol.bai.ravel.remapper")
 
 abstract class Remapper(
     val regex: Regex
 ) {
     companion object {
-        fun createInstances() = listOf(
-            MixinRemapper(),
-            JavaRemapper(),
-            ClassTweakerRemapper()
-        )
+        fun createInstances(): List<Remapper> {
+            val result = mutableListOf<Remapper>()
+            EP.forEachExtensionSafe {
+                result.add(Class.forName(it.implementation).getConstructor().newInstance() as Remapper)
+            }
+            return result
+        }
     }
 
     protected lateinit var project: Project
@@ -34,5 +41,13 @@ abstract class Remapper(
 
     abstract fun fileComment(comment: String)
     abstract fun remap()
+
+}
+
+class RemapperBean {
+
+    @field:Attribute
+    @field:RequiredElement
+    lateinit var implementation: String
 
 }

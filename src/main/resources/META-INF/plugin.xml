@@ -9,9 +9,6 @@
 
     <resource-bundle>messages.RavelBundle</resource-bundle>
 
-    <extensions defaultExtensionNs="com.intellij">
-    </extensions>
-
     <actions>
         <action id="lol.bai.ravel.ui.RemapperAction"
                 class="lol.bai.ravel.ui.RemapperAction"
@@ -31,4 +28,24 @@
                 class="lol.bai.ravel.ui.RemapperDialog$UnMarkAction"
                 icon="AllIcons.General.Remove"/>
     </actions>
+
+    <extensionPoints>
+        <extensionPoint name="remapper"
+                        beanClass="lol.bai.ravel.remapper.RemapperBean"
+                        dynamic="true">
+            <with attribute="implementation" implements="lol.bai.ravel.remapper.Remapper"/>
+        </extensionPoint>
+    </extensionPoints>
+
+    <extensions defaultExtensionNs="lol.bai.ravel">
+        <remapper id="mixin"
+                  implementation="lol.bai.ravel.remapper.MixinRemapper"
+                  order="first"/>
+
+        <remapper id="java"
+                  implementation="lol.bai.ravel.remapper.JavaRemapper"/>
+
+        <remapper id="class-tweaker"
+                  implementation="lol.bai.ravel.remapper.ClassTweakerRemapper"/>
+    </extensions>
 </idea-plugin>
