@@ -2,6 +2,9 @@
 
 # ravel Changelog
 
+## 0.2.0
+- Initial support for remapping Kotlin sources
+
 ## 0.1.1
 ### Fixed
 - Removed usage of internal fleet.util.Multimap
