@@ -19,6 +19,7 @@ private const val Intrinsic      = "${mixin}.Intrinsic"
 private const val Mutable        = "${mixin}.Mutable"
 private const val Overwrite      = "${mixin}.Overwrite"
 private const val Dynamic        = "${mixin}.Dynamic"
+private const val Pseudo         = "${mixin}.Pseudo"
 private const val Invoker        = "${mixin}.gen.Invoker"
 private const val Accessor       = "${mixin}.gen.Accessor"
 private const val At             = "${mixin}.injection.At"
@@ -120,6 +121,7 @@ class MixinRemapper : JavaRemapper() {
         if (annotationName == Local) return@a
         if (annotationName == Share) return@a
         if (annotationName == Dynamic) return@a
+        if (annotationName == Pseudo) return@a
         if (annotationName == Coerce) return@a
 
         fun warnNotLiterals(pElt: PsiElement) {
