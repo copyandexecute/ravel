@@ -156,6 +156,10 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
 
         val lateWrite = arrayListOf<() -> Unit>()
         pFile.process r@{ kRef: KtNameReferenceExpression ->
+            val kRefParent = kRef.parent
+            if (kRefParent is KtSuperExpression) return@r
+            if (kRefParent is KtThisExpression) return@r
+
             val pRef = kRef.reference ?: return@r
             val pTarget = pRef.resolve() ?: return@r
             val pSafeParent = kRef.parent<PsiNamedElement>() ?: pFile
@@ -230,7 +234,6 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
                     }
 
                     // TODO: solve more get/set bullshit
-                    val kRefParent = kRef.parent
                     if (isGetSet && kRefParent is KtCallExpression) {
                         lateWrite.add w@{
                             val kArg = kRefParent.valueArguments.firstOrNull() ?: return@w
