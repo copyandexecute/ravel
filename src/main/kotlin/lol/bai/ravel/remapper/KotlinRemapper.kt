@@ -8,10 +8,14 @@ import lol.bai.ravel.psi.jvmName
 import lol.bai.ravel.util.Holder
 import lol.bai.ravel.util.decapitalize
 import lol.bai.ravel.util.held
+import lol.bai.ravel.util.linkedSetMultiMap
 import org.jetbrains.kotlin.asJava.toLightElements
 import org.jetbrains.kotlin.asJava.toLightMethods
+import org.jetbrains.kotlin.idea.base.psi.kotlinFqName
+import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
+import org.jetbrains.kotlin.psi.psiUtil.isImportDirectiveExpression
 
 private val regex = Regex(".*\\.kt")
 
@@ -154,6 +158,7 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
             write { kParam.setName(newName) }
         }
 
+        val pMemberImportUsages = linkedSetMultiMap<FqName, PsiNamedElement>()
         val lateWrite = arrayListOf<() -> Unit>()
         pFile.process r@{ kRef: KtNameReferenceExpression ->
             val kRefParent = kRef.parent
@@ -164,11 +169,15 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
             val pTarget = pRef.resolve() as? PsiNamedElement ?: return@r
             val pSafeParent = kRef.parent<PsiNamedElement>() ?: pFile
 
+            val kDot = kRef.parent<KtDotQualifiedExpression>()?.receiverExpression
+
             var staticTargetClassName: String? = null
             run t@{
-                if (pTarget.name != kRef.getReferencedName()) return@t
-
                 if (pTarget is KtProperty) {
+                    if (kRef.isImportDirectiveExpression()) return@r
+                    if (kDot != null) pTarget.fqName?.let { pMemberImportUsages.put(it, pTarget) }
+
+                    if (pTarget.name != kRef.getReferencedName()) return@t
                     if (pTarget.isTopLevel) staticTargetClassName = pTarget.containingKtFile.jvmName
                     val newTargetName = remap(pSafeParent, pTarget) ?: return@t
                     write { pRef.handleElementRename(newTargetName) }
@@ -176,13 +185,21 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
                 }
 
                 if (pTarget is KtParameter) {
+                    if (kRef.isImportDirectiveExpression()) return@r
                     if (!pTarget.hasValOrVar()) return@t
+                    if (kDot != null) pTarget.fqName?.let { pMemberImportUsages.put(it, pTarget) }
+
+                    if (pTarget.name != kRef.getReferencedName()) return@t
                     val newTargetName = remap(pSafeParent, pTarget) ?: return@t
                     write { pRef.handleElementRename(newTargetName) }
                     return@t
                 }
 
                 if (pTarget is KtNamedFunction) {
+                    if (kRef.isImportDirectiveExpression()) return@r
+                    if (kDot != null) pTarget.fqName?.let { pMemberImportUsages.put(it, pTarget) }
+
+                    if (pTarget.name != kRef.getReferencedName()) return@t
                     if (pTarget.isTopLevel) staticTargetClassName = pTarget.containingKtFile.jvmName
                     val newTargetName = remap(pSafeParent, pTarget) ?: return@t
                     write { pRef.handleElementRename(newTargetName) }
@@ -191,6 +208,7 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
 
                 fun remapKotlinClass(kClass: KtClassOrObject?) {
                     if (kClass == null) return
+                    if (kClass.name != kRef.getReferencedName()) return
                     staticTargetClassName = kClass.jvmName
                     val newTargetName = mTree.getClass(kClass.jvmName)?.newFullPeriodName ?: return
                     write { pRef.handleElementRename(newTargetName.substringAfterLast('.')) }
@@ -205,7 +223,13 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
                 }
 
                 if (pTarget is PsiField) {
-                    if (pTarget.implicitly(PsiModifier.STATIC)) staticTargetClassName = pTarget.containingClass?.jvmName
+                    if (kRef.isImportDirectiveExpression()) return@r
+                    if (pTarget.implicitly(PsiModifier.STATIC)) {
+                        staticTargetClassName = pTarget.containingClass?.jvmName
+                        if (kDot != null) pTarget.kotlinFqName?.let { pMemberImportUsages.put(it, pTarget) }
+                        if (pTarget.name != kRef.getReferencedName()) return@t
+                    }
+
                     val newTargetName = remap(pTarget) ?: return@t
                     write { pRef.handleElementRename(newTargetName) }
                     return@t
@@ -213,14 +237,22 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
 
                 fun remapJavaClass(jClass: PsiClass?) {
                     if (jClass == null) return
+                    if (jClass.name != kRef.getReferencedName()) return
                     staticTargetClassName = jClass.jvmName
                     val newTargetName = mTree.get(jClass)?.newFullPeriodName ?: return
                     write { pRef.handleElementRename(newTargetName.substringAfterLast('.')) }
                 }
 
                 if (pTarget is PsiMethod) {
+                    if (kRef.isImportDirectiveExpression()) return@r
                     if (pTarget.isConstructor) return@t remapJavaClass(pTarget.containingClass)
-                    if (pTarget.implicitly(PsiModifier.STATIC)) staticTargetClassName = pTarget.containingClass?.jvmName
+
+                    if (pTarget.implicitly(PsiModifier.STATIC)) {
+                        staticTargetClassName = pTarget.containingClass?.jvmName
+                        if (kDot != null) pTarget.kotlinFqName?.let { pMemberImportUsages.put(it, pTarget) }
+                        if (pTarget.name != kRef.getReferencedName()) return@t
+                    }
+
                     val newTargetName = remap(pSafeParent, pTarget) ?: return@t
 
                     var isGetSet = false
@@ -280,8 +312,8 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
             }
 
             if (staticTargetClassName == null) return@r
+            if (kDot == null) return@r
 
-            val kDot = kRef.parent<KtDotQualifiedExpression>()?.receiverExpression ?: return@r
             val kDotRef =
                 if (kDot is KtDotQualifiedExpression) kDot.selectorExpression as? KtNameReferenceExpression
                 else kDot as? KtNameReferenceExpression
@@ -292,6 +324,46 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
             write { kDot.replace(factory.createExpression(newPackageName)) }
 
             lateWrite.forEach { write(it) }
+        }
+
+        pFile.process i@{ kImport: KtImportDirective ->
+            val kRefExp = kImport.importedReference ?: return@i
+            val kRefSelector =
+                if (kRefExp is KtDotQualifiedExpression) kRefExp.selectorExpression
+                else kRefExp as? KtNameReferenceExpression
+            if (kRefSelector == null) return@i
+
+            val targetName = kImport.importedFqName ?: return@i
+            val pUsages = pMemberImportUsages[targetName].orEmpty().ifEmpty { return@i }
+
+            val newNames = linkedMapOf<PsiNamedElement, Holder<String?>>()
+            for (pElt in pUsages) when (pElt) {
+                is KtProperty -> newNames[pElt] = remap(kImport, pElt).held
+                is KtParameter -> newNames[pElt] = remap(kImport, pElt).held
+                is KtNamedFunction -> newNames[pElt] = remap(kImport, pElt).held
+                is PsiField -> newNames[pElt] = remap(pElt).held
+                is PsiMethod -> newNames[pElt] = remap(kImport, pElt).held
+            }
+
+            val uniqueNewNames = mutableSetOf<String>()
+            for ((_, newNameHolder) in newNames) {
+                val newName = newNameHolder.value ?: continue
+                uniqueNewNames.add(newName)
+            }
+            if (uniqueNewNames.isEmpty()) return@i
+
+            if (uniqueNewNames.size != 1) {
+                val memberName = targetName.shortName().asString()
+                val comment = newNames
+                    .filter { it.value.value != null }
+                    .map { (k, v) -> "${k.name} -> ${v.value}" }
+                    .joinToString(separator = "\n")
+                logger.warn("ambiguous import, members with name $memberName have different new names")
+                write { comment(kImport, "TODO(Ravel): ambiguous import, members with name $memberName have different new names\n$comment") }
+                return@i
+            }
+
+            write { kRefSelector.replace(factory.createExpression(uniqueNewNames.first())) }
         }
     }
 
