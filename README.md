@@ -1,8 +1,10 @@
 # Ravel Remapper <img src="src/main/resources/META-INF/pluginIcon.svg" width="150" alt="Ravel Logo" align="right">
 
-![Build](https://github.com/badasintended/ravel/workflows/Build/badge.svg)
-[![Version](https://img.shields.io/jetbrains/plugin/v/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
-[![Downloads](https://img.shields.io/jetbrains/plugin/d/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
+[![Version](https://img.shields.io/jetbrains/plugin/v/28938-ravel-remapper.svg)](https://plugins.jetbrains.com/plugin/28938-ravel-remapper)
+[![Downloads](https://img.shields.io/jetbrains/plugin/d/28938-ravel-remapper.svg)](https://plugins.jetbrains.com/plugin/28938-ravel-remapper)
+
+[![GitHub Release](https://img.shields.io/github/v/release/badasintended/ravel?label=github%20release)](https://github.com/badasintended/ravel/releases)
+[![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/badasintended/ravel/total)](https://github.com/badasintended/ravel/releases)
 
 > **ravel** _[rav-uhl]_ verb    
 > _raveled, raveling, ravelled, ravelling_   
@@ -12,6 +14,9 @@
 
 Ravel is a plugin for IntelliJ IDEA to remap source files, based on
 [PSI](https://plugins.jetbrains.com/docs/intellij/psi.html) and [Mapping-IO](https://github.com/FabricMC/mapping-io).
+
+Install it from [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/28938-ravel-remapper) 
+or download it manually from [GitHub Release](https://github.com/badasintended/ravel/releases).
 
 Supports remapping:
 
