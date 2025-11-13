@@ -2,6 +2,14 @@ import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.kohsuke.github.GitHubBuilder
+import java.nio.file.Files
+
+buildscript {
+    dependencies {
+        classpath(libs.github.api)
+    }
+}
 
 plugins {
     java
@@ -116,5 +124,63 @@ changelog {
 tasks {
     publishPlugin {
         dependsOn(patchChangelog)
+    }
+
+    val publishGithub by registering(PublishGithubTask::class) {
+        dependsOn(buildPlugin)
+
+        githubToken.set(providers.environmentVariable("GITHUB_TOKEN").orNull)
+
+        repoName.set("badasintended/ravel")
+        versionName.set(project.version.toString())
+
+        changelogText.set(
+            providers.provider {
+                val version = project.version.toString()
+                val changelog = project.changelog.getOrNull(version) ?: project.changelog.getUnreleased()
+                project.changelog.renderItem(changelog, Changelog.OutputType.MARKDOWN)
+            }
+        )
+
+        archiveFile.set(buildPlugin.flatMap { t ->
+            t.outputs.files.singleFile.let { layout.file(project.provider { it }) }
+        })
+    }
+
+    register("publish") {
+        dependsOn(publishPlugin, publishGithub)
+    }
+}
+
+abstract class PublishGithubTask : DefaultTask() {
+    @get:Input
+    abstract val githubToken: Property<String>
+
+    @get:Input
+    abstract val repoName: Property<String>
+
+    @get:Input
+    abstract val versionName: Property<String>
+
+    @get:Input
+    abstract val changelogText: Property<String>
+
+    @get:InputFile
+    abstract val archiveFile: RegularFileProperty
+
+    @TaskAction
+    fun publish() {
+        val token = githubToken.orNull ?: throw IllegalStateException("GITHUB_TOKEN not provided")
+        val gh = GitHubBuilder().withOAuthToken(token).build()
+        val repo = gh.getRepository(repoName.get())
+
+        val release = repo.createRelease(versionName.get())
+            .name(versionName.get())
+            .commitish("master")
+            .body(changelogText.get())
+            .create()
+
+        val zip = archiveFile.asFile.get()
+        release.uploadAsset(zip, Files.probeContentType(zip.toPath()))
     }
 }
