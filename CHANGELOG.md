@@ -3,6 +3,8 @@
 # Ravel Changelog
 
 ## Unreleased
+### Fixed
+- A module can no longer be selected multiple times 
 
 ## 0.2.0
 - Initial support for remapping Kotlin sources

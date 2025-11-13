@@ -46,7 +46,7 @@ class RemapperDialog(
 
     val fileColor = FileColorManager.getInstance(project)!!
 
-    val modulesLabel = JLabel(B("dialog.remapper.modules", 0, 0))
+    val modulesLabel = JLabel()
     lateinit var moduleList: ModuleList
 
     init {
@@ -121,6 +121,7 @@ class RemapperDialog(
             moduleModel.add(ModuleEntry(module, false))
         }
         moduleList = ModuleList(moduleModel)
+        modulesLabel.text = B("dialog.remapper.modules", model.modules.size, moduleModel.size)
         val modules = ToolbarDecorator
             .createDecorator(moduleList)
             .disableAddAction()

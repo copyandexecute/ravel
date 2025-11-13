@@ -28,7 +28,7 @@ import lol.bai.ravel.util.listMultiMap
 
 data class RemapperModel(
     val mappings: MutableList<MioMappingConfig> = arrayListOf(),
-    val modules: MutableList<Module> = arrayListOf(),
+    val modules: MutableSet<Module> = linkedSetOf(),
 )
 
 class RemapperAction : AnAction() {
@@ -60,11 +60,6 @@ class RemapperAction : AnAction() {
         }
     }
 
-    /**
-     * TODO: Currently tested with Fabric API
-     *  - access widener
-     *  - kotlin
-     */
     suspend fun remap(project: Project, model: RemapperModel) {
         val time = System.currentTimeMillis()
 
