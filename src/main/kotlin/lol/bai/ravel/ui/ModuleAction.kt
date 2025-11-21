@@ -11,9 +11,11 @@ abstract class ModuleAction : AnAction() {
         val model = e.getData(K.modelData) ?: return
         val modules = e.getData(K.modulesList) ?: return
         val modulesLabel = e.getData(K.modulesLabel) ?: return
+        val check = e.getData(K.check) ?: return
 
         act(model, modules)
         modulesLabel.text = B("dialog.remapper.modules", model.modules.size, modules.model.size)
+        check()
     }
 }
 

@@ -34,6 +34,7 @@ internal object K {
     val modulesLabel = DataKey.create<JLabel>("RemapperDialogModulesLabel")
     val modulesList = DataKey.create<ModuleList>("RemapperDialogModulesList")
     val mappingsModel = DataKey.create<CollectionListModel<MioMappingConfig>>("RemapperDialogMappingsModel")
+    val check = DataKey.create<() -> Unit>("RemapperDialogCheck")
 }
 
 internal inline fun <reified T> S() = application.getService<T>(T::class.java)

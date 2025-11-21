@@ -1,5 +1,6 @@
 package lol.bai.ravel.ui
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.DataProvider
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
@@ -15,6 +16,8 @@ import lol.bai.ravel.mapping.MioMappingConfig
 import org.jetbrains.annotations.NonNls
 import javax.swing.JLabel
 import javax.swing.JList
+import javax.swing.event.ListDataEvent
+import javax.swing.event.ListDataListener
 import com.intellij.ui.dsl.builder.panel as rootPanel
 
 class RemapperDialog(
@@ -24,13 +27,16 @@ class RemapperDialog(
 
     val fileColor = FileColorManager.getInstance(project)!!
 
-    val modulesLabel = JLabel()
+    val mappingsLabel = JLabel(B("dialog.remapper.mappings")).apply { horizontalTextPosition = JLabel.LEFT }
+    val modulesLabel = JLabel().apply { horizontalTextPosition = JLabel.LEFT }
+
     lateinit var moduleList: ModuleList
     lateinit var mappingsModel: CollectionListModel<MioMappingConfig>
 
     init {
         title = B("dialog.remapper.title")
         init()
+        check()
     }
 
     override fun getData(dataId: @NonNls String) = when (dataId) {
@@ -38,16 +44,33 @@ class RemapperDialog(
         K.modulesLabel.name -> modulesLabel
         K.modulesList.name -> moduleList
         K.mappingsModel.name -> mappingsModel
+        K.check.name -> this::check
         else -> null
     }
 
+    fun check() {
+        val hasMappings = model.mappings.isNotEmpty()
+        val hasModules = model.modules.isNotEmpty()
+
+        mappingsLabel.icon = if (hasMappings) null else AllIcons.General.BalloonError
+        modulesLabel.icon = if (hasModules) null else AllIcons.General.BalloonError
+
+        okAction.isEnabled = hasMappings && hasModules
+    }
+
     override fun createCenterPanel() = rootPanel {
-        mappingsModel = CollectionListModel(model.mappings, true)
+        mappingsModel = CollectionListModel(model.mappings, true).apply {
+            addListDataListener(object : ListDataListener {
+                override fun intervalAdded(e: ListDataEvent) = check()
+                override fun intervalRemoved(e: ListDataEvent) = check()
+                override fun contentsChanged(e: ListDataEvent) = check()
+            })
+        }
         val mappingsList = JBList<MioMappingConfig>().apply {
             model = mappingsModel
             setEmptyText(B("dialog.remapper.empty"))
         }
-        val steps = ToolbarDecorator
+        val mappings = ToolbarDecorator
             .createDecorator(mappingsList)
             .setPreferredSize(JBUI.size(300, 500))
             .addExtraAction(A<MappingActionGroup>())
@@ -77,7 +100,7 @@ class RemapperDialog(
             .createPanel()
 
         row {
-            cell(steps).label(B("dialog.remapper.mappings"), LabelPosition.TOP)
+            cell(mappings).label(mappingsLabel, LabelPosition.TOP)
             cell(modules).label(modulesLabel, LabelPosition.TOP)
         }
     }
