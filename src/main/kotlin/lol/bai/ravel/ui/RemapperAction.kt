@@ -51,7 +51,7 @@ class RemapperAction : AnAction() {
         }
     }
 
-    suspend fun <T> run(project: Project, title: String, size: Int, block: suspend ProgressReporter.() -> T): T {
+    suspend fun <T> run(project: Project, title: String, size: Int, block: suspend (ProgressReporter) -> T): T {
         return withModalProgress(ModalTaskOwner.project(project), title, TaskCancellation.nonCancellable()) {
             reportProgress(size) { reporter ->
                 block(reporter)
@@ -59,74 +59,78 @@ class RemapperAction : AnAction() {
         }
     }
 
-    suspend fun remap(project: Project, model: RemapperModel) {
+    suspend fun remap(project: Project, model: RemapperModel) = run(project, B("dialog.remapper.title"), 2) { rootProcess ->
         val time = System.currentTimeMillis()
 
-        val mTree = run(project, B("progress.readingMappings"), 1) {
-            indeterminateStep {
-                val mTree = MappingTree()
-                model.mappings.first().tree.classes.forEach {
-                    mTree.putClass(MioClassMapping(model.mappings, it))
-                }
-                mTree
+        val mTree = rootProcess.indeterminateStep(B("progress.readingMappings")) {
+            val mTree = MappingTree()
+            model.mappings.first().tree.classes.forEach {
+                mTree.putClass(MioClassMapping(model.mappings, it))
             }
+            mTree
         }
 
-        val files = run(project, B("progress.fileTraverse"), 1) {
-            indeterminateStep {
-                val files = arrayListOf<Pair<VirtualFile, Module>>()
-                for (module in model.modules) {
-                    for (root in module.rootManager.sourceRoots) {
-                        VfsUtil.iterateChildrenRecursively(root, null) {
-                            files.add(it to module)
-                        }
+        val files = rootProcess.indeterminateStep(B("progress.fileTraverse")) {
+            val files = arrayListOf<Pair<VirtualFile, Module>>()
+            for (module in model.modules) {
+                for (root in module.rootManager.sourceRoots) {
+                    VfsUtil.iterateChildrenRecursively(root, null) {
+                        if (it.isFile) files.add(it to module)
+                        true
                     }
                 }
-                files
             }
+            files
         }
 
-        val fileWriters = run(project, B("progress.processing"), files.size) {
-            val fileWriters = listMultiMap<VirtualFile, () -> Unit>()
-            for ((vf, module) in files) itemStep(vf.path) {
-                readActionBlocking r@{
-                    if (!vf.isFile) return@r true
+        val fileWriters = rootProcess.itemStep(B("progress.resolving", files.size)) {
+            val fileCount = files.size
+            var fileIndex = 1
+            reportProgress(fileCount) { fileProcess ->
+                val fileWriters = listMultiMap<VirtualFile, () -> Unit>()
+                for ((vf, module) in files) fileProcess.itemStep("${vf.path} (${fileIndex}/${fileCount})") i@{
+                    fileIndex++
+                    if (!vf.isFile) return@i
 
-                    for (remapper in RemapperExtension.createInstances()) {
-                        if (!remapper.regex.matches(vf.name)) continue
+                    for (remapper in RemapperExtension.createInstances()) readActionBlocking r@{
+                        if (!remapper.regex.matches(vf.name)) return@r
 
                         val scope = module.getModuleWithDependenciesAndLibrariesScope(true)
-                        val initialized = remapper.init(project, scope, mTree, vf) { writer -> fileWriters.put(vf, writer) }
-                        if (!initialized) continue
+                        val valid = remapper.init(project, scope, mTree, vf) { writer -> fileWriters.put(vf, writer) }
+                        if (!valid) return@r
 
                         try {
-                            remapper.remap()
+                            remapper.stages().forEach { it.run() }
                         } catch (e: Exception) {
-                            fileWriters.put(vf) { remapper.fileComment("TODO(Ravel): Failed to fully remap file: ${e.message}") }
-                            logger.error("Failed to fully remap ${vf.path}", e)
+                            fileWriters.put(vf) { remapper.fileComment("TODO(Ravel): Failed to fully resolve file: ${e.message}") }
+                            logger.error("Failed to fully resolve ${vf.path}", e)
                         }
                     }
                 }
-                true
+                fileWriters
             }
-            fileWriters
         }
 
         logger.warn("Mapping resolved in ${System.currentTimeMillis() - time}ms")
 
-        run(project, B("progress.remapping"), fileWriters.size) {
-            @Suppress("UnstableApiUsage")
-            fileWriters.forEach { (vf, writers) ->
-                itemStep(vf.path) {
-                    writeCommandAction(project, "Ravel Writer") {
-                        writers.forEach { writer ->
-                            try {
-                                writer.invoke()
-                            } catch (e: Exception) {
-                                logger.error("Failed to write ${vf.path}", e)
+        val fileCount = fileWriters.size
+        var fileIndex = 1
+        rootProcess.itemStep(B("progress.remapping", fileCount)) {
+            reportProgress(fileWriters.values.sumOf { it.size }) { writerProcess ->
+                @Suppress("UnstableApiUsage")
+                fileWriters.forEach { (vf, writers) ->
+                    writers.forEach { writer ->
+                        try {
+                            writerProcess.itemStep("${vf.path} (${fileIndex}/${fileCount})") {
+                                writeCommandAction(project, "Ravel Writer") {
+                                    writer.invoke()
+                                }
                             }
+                        } catch (e: Exception) {
+                            logger.error("Failed to write ${vf.path}", e)
                         }
                     }
+                    fileIndex++
                 }
             }
         }

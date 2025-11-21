@@ -13,7 +13,6 @@ opentest4j = "1.3.0"
 [libraries]
 github-api = { group = "org.kohsuke", name = "github-api", version.ref = "github-api" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
-kotlin-compiler = { group = "org.jetbrains.kotlin", name = "kotlin-compiler", version.ref = "kotlin" }
 mapping-io = { group = "net.fabricmc", name = "mapping-io", version.ref = "mapping-io" }
 opentest4j = { group = "org.opentest4j", name = "opentest4j", version.ref = "opentest4j" }
 

@@ -2,7 +2,7 @@ package lol.bai.ravel.remapper
 
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.psi.*
-import com.intellij.psi.javadoc.PsiDocTag
+import com.intellij.psi.javadoc.PsiDocTagValue
 import lol.bai.ravel.mapping.rawQualifierSeparators
 import lol.bai.ravel.psi.implicitly
 import lol.bai.ravel.psi.jvmDesc
@@ -43,34 +43,41 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
         return pClass.findMethodsByName(name, false).find { it.jvmDesc == signature }
     }
 
-    override fun remap() {
-        val nonFqnClassNames = hashMapOf<String, String>()
-        pFile.process c@{ pClass: PsiClass ->
-            val className = pClass.name ?: return@c
-            val classJvmName = pClass.jvmName ?: return@c
+    protected open inner class JavaStage: JavaRecursiveElementWalkingVisitor(), Stage {
+        override fun run() = pFile.accept(this)
+    }
+
+    override fun stages() = listOf<Stage>(
+        classNameCollector,
+        memberRemapper,
+        referenceRemapper,
+        staticImportRemapper,
+        docTagValueRemapper,
+    )
+
+    // TODO: solve in-project class remapping
+    private val nonFqnClassNames = hashMapOf<String, String>()
+    private val classNameCollector = object : JavaStage() {
+        override fun visitClass(pClass: PsiClass) {
+            val className = pClass.name ?: return
+            val classJvmName = pClass.jvmName ?: return
             nonFqnClassNames[className] = classJvmName
         }
-
-        // TODO: solve in-project class remapping
-        // pFile.process c@{ pClass: PsiClass ->
-        //     val mClass = mTree.get(pClass) ?: return@c
-        //     val newClassName = mClass.newFullPeriodName ?: return@c
-        //     write { pClass.setName(newClassName) }
-        // }
-
-        pFile.process f@{ pField: PsiField ->
-            val newFieldName = remap(pField) ?: return@f
+    }
+    private val memberRemapper = object : JavaStage() {
+        override fun visitField(pField: PsiField) {
+            val newFieldName = remap(pField) ?: return
             write { pField.name = newFieldName }
         }
 
-        pFile.process m@{ pMethod: PsiMethod ->
-            val newMethodName = remap(pMethod, pMethod) ?: return@m
+        override fun visitMethod(pMethod: PsiMethod) {
+            val newMethodName = remap(pMethod, pMethod) ?: return
             write { pMethod.name = newMethodName }
         }
 
-        pFile.process r@{ pRecordComponent: PsiRecordComponent ->
-            val pClass = pRecordComponent.containingClass ?: return@r
-            val className = pClass.qualifiedName ?: return@r
+        override fun visitRecordComponent(pRecordComponent: PsiRecordComponent) {
+            val pClass = pRecordComponent.containingClass ?: return
+            val className = pClass.qualifiedName ?: return
 
             val recordComponentName = pRecordComponent.name
             val recordComponentDesc = pRecordComponent.type.jvmRaw
@@ -87,45 +94,46 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
                 newGetterName[key] = remap(pClass, pGetter) ?: pGetter.name
             }
 
-            if (newGetterName.isEmpty()) return@r
+            if (newGetterName.isEmpty()) return
 
             val uniqueNewGetterNames = newGetterName.values.toSet()
             if (uniqueNewGetterNames.size != 1) {
                 logger.warn("$className: record component '$recordComponentName' overrides methods with different new names")
                 val comment = newGetterName.map { (k, v) -> "$k -> $v" }.joinToString(separator = "\n")
                 write { comment(pClass, "TODO(Ravel): record component '$recordComponentName' overrides methods with different new names\n$comment") }
-                return@r
+                return
             }
 
             val uniqueNewGetterName = uniqueNewGetterNames.first()
             mTree.getOrPut(pClass).putField(recordComponentName, uniqueNewGetterName)
             write { pRecordComponent.name = uniqueNewGetterName }
         }
+    }
+    private val pStaticImportUsages = linkedSetMultiMap<String, PsiMember>()
+    private val referenceRemapper = object : JavaStage() {
+        override fun visitReferenceElement(pRef: PsiJavaCodeReferenceElement) {
+            if (pRef is PsiImportStaticReferenceElement) return
+            val pRefId = pRef.referenceNameElement as? PsiIdentifier ?: return
 
-        val pStaticImportUsages = linkedSetMultiMap<String, PsiMember>()
-        pFile.process r@{ pRef: PsiJavaCodeReferenceElement ->
-            if (pRef is PsiImportStaticReferenceElement) return@r
-            val pRefId = pRef.referenceNameElement as? PsiIdentifier ?: return@r
-
-            val pTarget = pRef.resolve() ?: return@r
+            val pTarget = pRef.resolve() ?: return
             val pSafeParent = pRef.parent<PsiNamedElement>() ?: pFile
 
             if (pTarget is PsiField) {
                 if (pTarget.implicitly(PsiModifier.STATIC) && pRef.qualifier == null) {
                     pStaticImportUsages.put(pTarget.name, pTarget)
                 }
-                val newFieldName = remap(pTarget) ?: return@r
+                val newFieldName = remap(pTarget) ?: return
                 write { pRefId.replace(factory.createIdentifier(newFieldName)) }
-                return@r
+                return
             }
 
             if (pTarget is PsiMethod) {
                 if (pTarget.implicitly(PsiModifier.STATIC) && pRef.qualifier == null) {
                     pStaticImportUsages.put(pTarget.name, pTarget)
                 }
-                val newMethodName = remap(pSafeParent, pTarget) ?: return@r
+                val newMethodName = remap(pSafeParent, pTarget) ?: return
                 write { pRefId.replace(factory.createIdentifier(newMethodName)) }
-                return@r
+                return
             }
 
             fun replaceClass(pClass: PsiClass, pClassRef: PsiJavaCodeReferenceElement) {
@@ -160,11 +168,12 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
 
             if (pTarget is PsiClass) replaceClass(pTarget, pRef)
         }
-
-        pFile.process r@{ pRef: PsiImportStaticReferenceElement ->
-            val pRefId = pRef.referenceNameElement as? PsiIdentifier ?: return@r
-            val pStatement = pRef.parent<PsiImportStaticStatement>() ?: return@r
-            val pClass = pRef.classReference.resolve() as? PsiClass ?: return@r
+    }
+    private val staticImportRemapper = object : JavaStage() {
+        override fun visitImportStaticReferenceElement(pRef: PsiImportStaticReferenceElement) {
+            val pRefId = pRef.referenceNameElement as? PsiIdentifier ?: return
+            val pStatement = pRef.parent<PsiImportStaticStatement>() ?: return
+            val pClass = pRef.classReference.resolve() as? PsiClass ?: return
             val memberName = pRefId.text
 
             val pUsages = pStaticImportUsages[memberName].orEmpty().ifEmpty {
@@ -186,31 +195,30 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
                 logger.warn("ambiguous static import, members with name $memberName have different new names")
                 val comment = newMemberNames.map { (k, v) -> "$k -> $v" }.joinToString(separator = "\n")
                 write { comment(pStatement, "TODO(Ravel): ambiguous static import, members with name $memberName have different new names\n$comment") }
-                return@r
+                return
             }
 
             write { pRefId.replace(factory.createIdentifier(uniqueNewMemberNames.first())) }
-            return@r
+            return
         }
-
-        pFile.process d@{ pDocTag: PsiDocTag ->
-            val pValue = pDocTag.valueElement ?: return@d
-            val pRef = pValue.reference ?: return@d
-            val pRefTarget = pRef.resolve() ?: return@d
+    }
+    private val docTagValueRemapper = object : JavaStage() {
+        override fun visitDocTagValue(pValue: PsiDocTagValue) {
+            val pRef = pValue.reference ?: return
+            val pRefTarget = pRef.resolve() ?: return
 
             if (pRefTarget is PsiField) {
-                val newFieldName = remap(pRefTarget) ?: return@d
+                val newFieldName = remap(pRefTarget) ?: return
                 write { pRef.handleElementRename(newFieldName) }
-                return@d
+                return
             }
 
             if (pRefTarget is PsiMethod) {
-                val pSafeElt = pDocTag.parent<PsiMember>() ?: pFile
-                val newMethodName = remap(pSafeElt, pRefTarget) ?: return@d
+                val pSafeElt = pValue.parent<PsiMember>() ?: pFile
+                val newMethodName = remap(pSafeElt, pRefTarget) ?: return
                 write { pRef.handleElementRename(newMethodName) }
-                return@d
+                return
             }
         }
     }
-
 }

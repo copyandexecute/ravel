@@ -54,7 +54,8 @@ class ClassTweakerRemapper : Remapper(regex) {
         file.writeText(sb.toString())
     }
 
-    override fun remap() {
+    override fun stages() = listOf(stage)
+    private val stage = stage() {
         var modified = false
         val sb = StringBuilder()
         val lineIter = lines.iterator()
@@ -155,5 +156,4 @@ class ClassTweakerRemapper : Remapper(regex) {
 
         if (modified) write { file.writeText(sb.toString()) }
     }
-
 }

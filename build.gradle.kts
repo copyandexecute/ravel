@@ -30,15 +30,8 @@ repositories {
     intellijPlatform.defaultRepositories()
 }
 
-configurations {
-    create("stub")
-}
-
 dependencies {
     implementation(libs.mapping.io)
-
-    val stub by configurations
-    stub(libs.kotlin.compiler)
 
     testImplementation(libs.junit)
     testImplementation(libs.opentest4j)

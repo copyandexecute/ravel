@@ -28,7 +28,14 @@ abstract class Remapper(
     }
 
     abstract fun fileComment(comment: String)
-    abstract fun remap()
+    abstract fun stages(): List<Stage>
 
+    interface Stage {
+        fun run()
+    }
+
+    protected fun stage(runner: () -> Unit) = object : Stage {
+        override fun run() = runner()
+    }
 }
 

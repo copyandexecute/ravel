@@ -104,7 +104,8 @@ class MixinRemapper : JavaRemapper() {
         return true
     }
 
-    override fun remap() = pFile.process a@{ pAnnotation: PsiAnnotation ->
+    override fun stages() = listOf(stage)
+    private val stage = psiStage a@{ pAnnotation: PsiAnnotation ->
         val pClass = pAnnotation.parent<PsiClass>() ?: return@a
         val className = pClass.qualifiedName ?: return@a
         val annotationName = pAnnotation.qualifiedName ?: return@a
@@ -605,5 +606,4 @@ class MixinRemapper : JavaRemapper() {
         write { comment(pMember, "TODO(Ravel): remapper for $annotationName is not implemented") }
         logger.warn("$className: remapper for $annotationName is not implemented")
     }
-
 }

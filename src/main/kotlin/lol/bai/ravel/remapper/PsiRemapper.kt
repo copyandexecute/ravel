@@ -10,7 +10,7 @@ typealias Writer = (() -> Unit) -> Unit
 abstract class PsiRemapper<F : PsiFile>(
     regex: Regex,
     val caster: (PsiFile?) -> F?,
-): Remapper(regex) {
+) : Remapper(regex) {
 
     protected lateinit var pFile: F
 
@@ -23,10 +23,12 @@ abstract class PsiRemapper<F : PsiFile>(
     abstract fun comment(pElt: PsiElement, comment: String)
     override fun fileComment(comment: String) = comment(pFile, comment)
 
-    protected inline fun <reified E : PsiElement> PsiElement.process(crossinline action: (E) -> Unit) {
-        PsiTreeUtil.processElements(this, E::class.java) {
-            action(it)
-            true
+    protected inline fun <reified E : PsiElement> psiStage(crossinline action: (E) -> Unit): Stage = object : Stage {
+        override fun run() {
+            PsiTreeUtil.processElements(pFile, E::class.java) {
+                action(it)
+                true
+            }
         }
     }
 
