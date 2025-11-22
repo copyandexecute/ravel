@@ -37,6 +37,7 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
         collectClassNames,
         remapMembers,
         remapReferences,
+        remapArrayReferences,
         remapImports,
     )
 
@@ -185,26 +186,6 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
             lateRefWrites.sortedByDescending { it.first }.forEach { write(it.second) }
         }
 
-        override fun visitArrayAccessExpression(kRef: KtArrayAccessExpression) {
-            val pRef = kRef.reference() ?: return
-            val pTarget = pRef.resolve() as? PsiNamedElement ?: return
-            val pSafeParent = kRef.parent<PsiNamedElement>() ?: pFile
-
-            if (pTarget is PsiMethod) {
-                val newTargetName = remap(pSafeParent, pTarget) ?: return
-                if (newTargetName == "get" || newTargetName == "set") return
-
-                lateRefWrites.add(kRef.depth to w@{
-                    val owner = kRef.arrayExpression?.text ?: return@w
-                    val args = kRef.indexExpressions.joinToString { it.text }
-                    kRef.replace(factory.createExpression("${owner}.${newTargetName}($args)"))
-                })
-                return
-            }
-
-            // TODO: kotlin operator function rename?
-        }
-
         override fun visitSimpleNameExpression(kRef: KtSimpleNameExpression) {
             val kRefParent = kRef.parent
             if (kRefParent is KtSuperExpression) return
@@ -225,7 +206,7 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
                     if (pTarget.name != kRef.getReferencedName()) return@t
                     if (pTarget.isTopLevel) staticTargetClassName = pTarget.containingKtFile.jvmName
                     val newTargetName = remap(pSafeParent, pTarget) ?: return@t
-                    write { pRef.handleElementRename(newTargetName) }
+                    write { kRef.replace(factory.createSimpleName(newTargetName.quoteIfNeeded())) }
                     return@t
                 }
 
@@ -238,7 +219,7 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
                     }
 
                     val newTargetName = remap(pTarget) ?: return@t
-                    write { pRef.handleElementRename(newTargetName) }
+                    write { kRef.replace(factory.createSimpleName(newTargetName.quoteIfNeeded())) }
                     return@t
                 }
 
@@ -249,7 +230,7 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
 
                     if (pTarget.name != kRef.getReferencedName()) return@t
                     val newTargetName = remap(pSafeParent, pTarget) ?: return@t
-                    write { pRef.handleElementRename(newTargetName) }
+                    write { kRef.replace(factory.createSimpleName(newTargetName.quoteIfNeeded())) }
                     return@t
                 }
 
@@ -368,7 +349,7 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
                         return@t remapMethodCall(jMethods.first(), newTargetName)
                     }
 
-                    write { pRef.handleElementRename(newTargetName) }
+                    write { kRef.replace(factory.createSimpleName(newTargetName.quoteIfNeeded())) }
                     return@t
                 }
 
@@ -377,7 +358,7 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
                     if (kClass.name != kRef.getReferencedName()) return
                     staticTargetClassName = kClass.jvmName
                     val newTargetName = mTree.getClass(kClass.jvmName)?.newFullPeriodName ?: return
-                    write { pRef.handleElementRename(newTargetName.substringAfterLast('.')) }
+                    write { kRef.replace(factory.createSimpleName(newTargetName.substringAfterLast('.').quoteIfNeeded())) }
                 }
 
                 if (pTarget is KtConstructor<*>) {
@@ -393,7 +374,7 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
                     if (jClass.name != kRef.getReferencedName()) return
                     staticTargetClassName = jClass.jvmName
                     val newTargetName = mTree.get(jClass)?.newFullPeriodName ?: return
-                    write { pRef.handleElementRename(newTargetName.substringAfterLast('.')) }
+                    write { kRef.replace(factory.createSimpleName(newTargetName.substringAfterLast('.').quoteIfNeeded())) }
                 }
 
                 if (pTarget is PsiMethod) {
@@ -426,6 +407,27 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
             val newClassName = mTree.getClass(staticTargetClassName)?.newPkgPeriodName ?: return
             val newPackageName = newClassName.substringBeforeLast('.')
             write { kDot.replace(factory.createExpression(newPackageName)) }
+        }
+    }
+    private val remapArrayReferences = object : KotlinStage() {
+        override fun visitArrayAccessExpression(kRef: KtArrayAccessExpression) {
+            val pRef = kRef.reference() ?: return
+            val pTarget = pRef.resolve() as? PsiNamedElement ?: return
+            val pSafeParent = kRef.parent<PsiNamedElement>() ?: pFile
+
+            if (pTarget is PsiMethod) {
+                val newTargetName = remap(pSafeParent, pTarget) ?: return
+                if (newTargetName == "get" || newTargetName == "set") return
+
+                write w@{
+                    val owner = kRef.arrayExpression?.text ?: return@w
+                    val args = kRef.indexExpressions.joinToString { it.text }
+                    kRef.replace(factory.createExpression("${owner}.${newTargetName}($args)"))
+                }
+                return
+            }
+
+            // TODO: kotlin operator function rename?
         }
     }
     private val remapImports = object : KotlinStage() {
