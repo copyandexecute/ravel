@@ -74,6 +74,7 @@ private object Point {
 class MixinRemapper : JavaRemapper() {
 
     private val logger = thisLogger()
+    override fun stages() = listOf(remapMixins)
 
     private fun splitClassMember(classMember: String): Pair<String?, String> {
         if (classMember.startsWith('L')) {
@@ -91,15 +92,7 @@ class MixinRemapper : JavaRemapper() {
     }
 
     private val mixinTargets = setMultiMap<String, String>()
-
-    override fun init(): Boolean {
-        if (!super.init()) return false
-        mixinTargets.clear()
-        return true
-    }
-
-    override fun stages() = listOf(stage)
-    private val stage = psiStage a@{ pAnnotation: PsiAnnotation ->
+    private val remapMixins = psiStage a@{ pAnnotation: PsiAnnotation ->
         val pClass = pAnnotation.parent<PsiClass>() ?: return@a
         val className = pClass.qualifiedName ?: return@a
         val annotationName = pAnnotation.qualifiedName ?: return@a

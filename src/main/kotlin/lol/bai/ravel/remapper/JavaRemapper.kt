@@ -15,6 +15,18 @@ private val regex = Regex("^.*\\.java$")
 open class JavaRemapper : JvmRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }) {
     private val logger = thisLogger()
 
+    protected abstract inner class JavaStage : JavaRecursiveElementWalkingVisitor(), Stage {
+        override fun invoke() = pFile.accept(this)
+    }
+
+    override fun stages() = listOf<Stage>(
+        collectClassNames,
+        remapMembers,
+        remapReferences,
+        remapStaticImports,
+        remapDocTagValues,
+    )
+
     protected lateinit var java: JavaPsiFacade
     protected lateinit var factory: PsiElementFactory
 
@@ -43,28 +55,16 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
         return pClass.findMethodsByName(name, false).find { it.jvmDesc == signature }
     }
 
-    protected open inner class JavaStage: JavaRecursiveElementWalkingVisitor(), Stage {
-        override fun invoke() = pFile.accept(this)
-    }
-
-    override fun stages() = listOf<Stage>(
-        classNameCollector,
-        memberRemapper,
-        referenceRemapper,
-        staticImportRemapper,
-        docTagValueRemapper,
-    )
-
     // TODO: solve in-project class remapping
     private val nonFqnClassNames = hashMapOf<String, String>()
-    private val classNameCollector = object : JavaStage() {
+    private val collectClassNames = object : JavaStage() {
         override fun visitClass(pClass: PsiClass) {
             val className = pClass.name ?: return
             val classJvmName = pClass.jvmName ?: return
             nonFqnClassNames[className] = classJvmName
         }
     }
-    private val memberRemapper = object : JavaStage() {
+    private val remapMembers = object : JavaStage() {
         override fun visitField(pField: PsiField) {
             val newFieldName = remap(pField) ?: return
             write { pField.name = newFieldName }
@@ -110,7 +110,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
         }
     }
     private val pStaticImportUsages = linkedSetMultiMap<String, PsiMember>()
-    private val referenceRemapper = object : JavaStage() {
+    private val remapReferences = object : JavaStage() {
         override fun visitReferenceElement(pRef: PsiJavaCodeReferenceElement) {
             if (pRef is PsiImportStaticReferenceElement) return
             val pRefId = pRef.referenceNameElement as? PsiIdentifier ?: return
@@ -169,7 +169,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
             if (pTarget is PsiClass) replaceClass(pTarget, pRef)
         }
     }
-    private val staticImportRemapper = object : JavaStage() {
+    private val remapStaticImports = object : JavaStage() {
         override fun visitImportStaticReferenceElement(pRef: PsiImportStaticReferenceElement) {
             val pRefId = pRef.referenceNameElement as? PsiIdentifier ?: return
             val pStatement = pRef.parent<PsiImportStaticStatement>() ?: return
@@ -202,7 +202,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>(regex, { it as? PsiJavaFile }
             return
         }
     }
-    private val docTagValueRemapper = object : JavaStage() {
+    private val remapDocTagValues = object : JavaStage() {
         override fun visitDocTagValue(pValue: PsiDocTagValue) {
             val pRef = pValue.reference ?: return
             val pRefTarget = pRef.resolve() ?: return

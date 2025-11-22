@@ -19,6 +19,7 @@ private object Entry {
 class ClassTweakerRemapper : Remapper(regex) {
 
     private lateinit var lines: List<String>
+    override fun stages() = listOf(remapClassTweakers)
 
     override fun init(): Boolean {
         val header = try {
@@ -54,8 +55,7 @@ class ClassTweakerRemapper : Remapper(regex) {
         file.writeText(sb.toString())
     }
 
-    override fun stages() = listOf(stage)
-    private val stage = Stage {
+    private val remapClassTweakers = Stage {
         var modified = false
         val sb = StringBuilder()
         val lineIter = lines.iterator()

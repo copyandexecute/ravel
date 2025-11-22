@@ -28,6 +28,18 @@ private val regex = Regex("^.*\\.kt$")
 class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
 
     private val logger = thisLogger()
+
+    private abstract inner class KotlinStage : KotlinRecursiveElementWalkingVisitor(), Stage {
+        override fun invoke() = pFile.accept(this)
+    }
+
+    override fun stages() = listOf<Stage>(
+        collectClassNames,
+        remapMembers,
+        remapReferences,
+        remapImports,
+    )
+
     private lateinit var factory: KtPsiFactory
 
     override fun init(): Boolean {
@@ -135,26 +147,15 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
         return uniqueNewNames.first()
     }
 
-    private open inner class KotlinStage : KotlinRecursiveElementWalkingVisitor(), Stage {
-        override fun invoke() = pFile.accept(this)
-    }
-
-    override fun stages() = listOf<Stage>(
-        classNameCollector,
-        memberRemapper,
-        referenceRemapper,
-        importRemapper,
-    )
-
     private val nonFqnClassNames = hashMapOf<String, String>()
-    private val classNameCollector = object : KotlinStage() {
+    private val collectClassNames = object : KotlinStage() {
         override fun visitClass(kClass: KtClass) {
             val className = kClass.name ?: return
             val classJvmName = kClass.jvmName ?: return
             nonFqnClassNames[className] = classJvmName
         }
     }
-    private val memberRemapper = object : KotlinStage() {
+    private val remapMembers = object : KotlinStage() {
         override fun visitProperty(kProperty: KtProperty) {
             val newName = remap(kProperty, kProperty) ?: return
             write { kProperty.setName(newName) }
@@ -176,8 +177,14 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
         }
     }
     private val pMemberImportUsages = linkedSetMultiMap<FqName, PsiNamedElement>()
-    private val lateRefWrites = arrayListOf<Pair<Int, () -> Unit>>()
-    private val referenceRemapper = object : KotlinStage() {
+    private val remapReferences = object : KotlinStage() {
+        private val lateRefWrites = arrayListOf<Pair<Int, () -> Unit>>()
+
+        override fun invoke() {
+            super.invoke()
+            lateRefWrites.sortedByDescending { it.first }.forEach { write(it.second) }
+        }
+
         override fun visitReferenceExpression(expression: KtReferenceExpression) {
             val kRef = expression as? KtNameReferenceExpression ?: return
             val kRefParent = kRef.parent
@@ -347,11 +354,7 @@ class KotlinRemapper : JvmRemapper<KtFile>(regex, { it as? KtFile }) {
             write { kDot.replace(factory.createExpression(newPackageName)) }
         }
     }
-    private val importRemapper = object : KotlinStage() {
-        override fun invoke() {
-            lateRefWrites.sortedByDescending { it.first }.forEach { write(it.second) }
-            super.invoke()
-        }
+    private val remapImports = object : KotlinStage() {
         override fun visitImportDirective(kImport: KtImportDirective) {
             val kRefExp = kImport.importedReference ?: return
             val kRefSelector =

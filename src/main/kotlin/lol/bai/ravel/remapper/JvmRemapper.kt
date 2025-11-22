@@ -8,7 +8,6 @@ abstract class JvmRemapper<F : PsiClassOwner>(
     regex: Regex,
     caster: (PsiFile?) -> F?
 ) : PsiRemapper<F>(regex, caster) {
-
     private val logger = thisLogger()
 
     protected fun remap(pField: PsiField): String? {
@@ -59,5 +58,4 @@ abstract class JvmRemapper<F : PsiClassOwner>(
         val newMethodName = uniqueNewMethodNames.first()
         return if (newMethodName == pMethod.name) null else newMethodName
     }
-
 }

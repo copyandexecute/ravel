@@ -16,6 +16,7 @@ import com.intellij.openapi.vfs.isFile
 import com.intellij.platform.ide.progress.ModalTaskOwner
 import com.intellij.platform.ide.progress.TaskCancellation
 import com.intellij.platform.ide.progress.withModalProgress
+import com.intellij.platform.util.progress.RawProgressReporter
 import com.intellij.platform.util.progress.reportRawProgress
 import kotlinx.coroutines.launch
 import lol.bai.ravel.mapping.MappingTree
@@ -32,7 +33,6 @@ data class RemapperModel(
 
 @Suppress("UnstableApiUsage")
 class RemapperAction : AnAction() {
-
     private val logger = thisLogger()
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
@@ -46,93 +46,97 @@ class RemapperAction : AnAction() {
         val model = RemapperModel()
         val ok = RemapperDialog(project, model).showAndGet()
 
-        if (ok && model.mappings.isNotEmpty() && model.modules.isNotEmpty()) {
-            currentThreadCoroutineScope().launch { remap(project, model) }
+        if (!ok) return
+        if (model.mappings.isEmpty() || model.modules.isEmpty()) return
+
+        currentThreadCoroutineScope().launch {
+            withModalProgress(ModalTaskOwner.project(project), B("dialog.remapper.title"), TaskCancellation.nonCancellable()) {
+                reportRawProgress { p ->
+                    remap(project, model, p)
+                }
+            }
         }
     }
 
-    suspend fun remap(project: Project, model: RemapperModel) = withModalProgress(ModalTaskOwner.project(project), B("dialog.remapper.title"), TaskCancellation.nonCancellable()) {
-        reportRawProgress { p ->
-            val time = System.currentTimeMillis()
+    suspend fun remap(project: Project, model: RemapperModel, progress: RawProgressReporter) {
+        val time = System.currentTimeMillis()
 
-            p.fraction(null)
-            p.text(B("progress.readingMappings"))
-            val mTree = MappingTree()
-            model.mappings.first().tree.classes.forEach {
-                mTree.putClass(MioClassMapping(model.mappings, it))
-            }
+        progress.fraction(null)
+        progress.text(B("progress.readingMappings"))
+        val mTree = MappingTree()
+        model.mappings.first().tree.classes.forEach {
+            mTree.putClass(MioClassMapping(model.mappings, it))
+        }
 
-            p.fraction(null)
-            p.text(B("progress.fileTraverse"))
-            val files = arrayListOf<Pair<VirtualFile, Module>>()
-            for (module in model.modules) {
-                for (root in module.rootManager.sourceRoots) {
-                    VfsUtil.iterateChildrenRecursively(root, null) {
-                        if (it.isFile) files.add(it to module)
-                        true
-                    }
+        progress.fraction(null)
+        progress.text(B("progress.fileTraverse"))
+        val files = arrayListOf<Pair<VirtualFile, Module>>()
+        for (module in model.modules) {
+            for (root in module.rootManager.sourceRoots) {
+                VfsUtil.iterateChildrenRecursively(root, null) {
+                    if (it.isFile) files.add(it to module)
+                    true
                 }
             }
+        }
 
-            var fileCount = files.size
-            var fileIndex = 0
-            val fileWriters = listMultiMap<VirtualFile, () -> Unit>()
-            var writersCount = 0
+        var fileCount = files.size
+        var fileIndex = 0
+        val fileWriters = listMultiMap<VirtualFile, () -> Unit>()
+        var writersCount = 0
 
-            for ((vf, module) in files) {
-                p.fraction(fileIndex.toDouble() / fileCount.toDouble())
-                p.text(B("progress.resolving", writersCount, fileIndex, fileCount))
-                p.details(vf.path)
-                fileIndex++
+        for ((vf, module) in files) {
+            progress.fraction(fileIndex.toDouble() / fileCount.toDouble())
+            progress.text(B("progress.resolving", writersCount, fileIndex, fileCount))
+            progress.details(vf.path)
+            fileIndex++
 
-                if (!vf.isFile) continue
-                for (remapper in RemapperExtension.createInstances()) readActionBlocking r@{
-                    if (!remapper.regex.matches(vf.name)) return@r
+            if (!vf.isFile) continue
+            for (remapper in RemapperExtension.createInstances()) readActionBlocking r@{
+                if (!remapper.regex.matches(vf.name)) return@r
 
-                    val scope = module.getModuleWithDependenciesAndLibrariesScope(true)
-                    val write = Remapper.Write { writer ->
-                        fileWriters.put(vf, writer)
-                        writersCount++
-                    }
+                val scope = module.getModuleWithDependenciesAndLibrariesScope(true)
+                val write = Remapper.Write { writer ->
+                    fileWriters.put(vf, writer)
+                    writersCount++
+                }
 
-                    val valid = remapper.init(project, scope, mTree, vf, write)
-                    if (!valid) return@r
+                val valid = remapper.init(project, scope, mTree, vf, write)
+                if (!valid) return@r
+
+                try {
+                    remapper.stages().forEach { it.invoke() }
+                } catch (e: Exception) {
+                    write { remapper.fileComment("TODO(Ravel): Failed to fully resolve file: ${e.message}") }
+                    logger.error("Failed to fully resolve ${vf.path}", e)
+                }
+            }
+        }
+
+        logger.warn("Mapping resolved in ${System.currentTimeMillis() - time}ms")
+
+        fileCount = fileWriters.size
+        fileIndex = 0
+        var writerIndex = 0
+
+        fileWriters.forEach { (vf, writers) ->
+            progress.details(vf.path)
+            writeCommandAction(project, "Ravel Writer") {
+                writers.forEach { writer ->
+                    progress.fraction(writerIndex.toDouble() / writersCount.toDouble())
+                    progress.text(B("progress.writing", writerIndex, writersCount, fileIndex, fileCount))
+                    writerIndex++
 
                     try {
-                        remapper.stages().forEach { it.invoke() }
+                        writer.invoke()
                     } catch (e: Exception) {
-                        write { remapper.fileComment("TODO(Ravel): Failed to fully resolve file: ${e.message}") }
-                        logger.error("Failed to fully resolve ${vf.path}", e)
+                        logger.error("Failed to write ${vf.path}", e)
                     }
                 }
             }
-
-            logger.warn("Mapping resolved in ${System.currentTimeMillis() - time}ms")
-
-            fileCount = fileWriters.size
-            fileIndex = 0
-            var writerIndex = 0
-
-            fileWriters.forEach { (vf, writers) ->
-                p.details(vf.path)
-                writeCommandAction(project, "Ravel Writer") {
-                    writers.forEach { writer ->
-                        p.fraction(writerIndex.toDouble() / writersCount.toDouble())
-                        p.text(B("progress.writing", writerIndex, writersCount, fileIndex, fileCount))
-                        writerIndex++
-
-                        try {
-                            writer.invoke()
-                        } catch (e: Exception) {
-                            logger.error("Failed to write ${vf.path}", e)
-                        }
-                    }
-                }
-                fileIndex++
-            }
-
-            logger.warn("Remap finished in ${System.currentTimeMillis() - time}ms")
+            fileIndex++
         }
-    }
 
+        logger.warn("Remap finished in ${System.currentTimeMillis() - time}ms")
+    }
 }
