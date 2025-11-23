@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [0.3.2]
+
+- Java: fix parameter types not getting remapped
+- Mixin: remove `remap=false` check, try to remap the target anyway
+- Kotlin: more robust Java property access remap
+- UI: remapping progress modal now reports how many changes to do
+
 ## [0.3.1]
 
 - Java: fix parameter types not getting remapped
@@ -36,7 +43,8 @@
 
 - Initial release
 
-[Unreleased]: https://github.com/badasintended/ravel/compare/0.3.1...HEAD
+[Unreleased]: https://github.com/badasintended/ravel/compare/0.3.2...HEAD
+[0.3.2]: https://github.com/badasintended/ravel/compare/0.3.1...0.3.2
 [0.3.1]: https://github.com/badasintended/ravel/compare/0.3.0...0.3.1
 [0.3.0]: https://github.com/badasintended/ravel/compare/0.2.1...0.3.0
 [0.2.1]: https://github.com/badasintended/ravel/compare/0.2.0...0.2.1
