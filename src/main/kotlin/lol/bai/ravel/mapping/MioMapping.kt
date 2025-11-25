@@ -1,11 +1,10 @@
 package lol.bai.ravel.mapping
 
 import java.nio.file.Path
-
-typealias MappingTreeImpl = net.fabricmc.mappingio.tree.MemoryMappingTree
-typealias ClassMappingImpl = net.fabricmc.mappingio.tree.MappingTree.ClassMapping
-typealias FieldMappingImpl = net.fabricmc.mappingio.tree.MappingTree.FieldMapping
-typealias MethodMappingImpl = net.fabricmc.mappingio.tree.MappingTree.MethodMapping
+import net.fabricmc.mappingio.tree.MappingTree.ClassMapping as ClassMappingImpl
+import net.fabricmc.mappingio.tree.MappingTree.FieldMapping as FieldMappingImpl
+import net.fabricmc.mappingio.tree.MappingTree.MethodMapping as MethodMappingImpl
+import net.fabricmc.mappingio.tree.MemoryMappingTree as MappingTreeImpl
 
 class MioMappingConfig(
     val tree: MappingTreeImpl,
@@ -19,7 +18,7 @@ class MioMappingConfig(
 class MioClassMapping(
     private val configs: List<MioMappingConfig>,
     private val mio: ClassMappingImpl
-) : ClassMapping() {
+) : MutableClassMapping() {
 
     override val oldName by lazy { mio.srcName!! }
     override val newName by lazy l@{

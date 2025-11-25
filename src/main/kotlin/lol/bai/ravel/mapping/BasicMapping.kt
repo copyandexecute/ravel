@@ -3,7 +3,7 @@ package lol.bai.ravel.mapping
 class BasicClassMapping(
     override val oldName: String,
     override val newName: String?
-) : ClassMapping()
+) : MutableClassMapping()
 
 class BasicFieldMapping(
     override val oldName: String,

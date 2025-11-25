@@ -89,9 +89,9 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
             jElt as PsiMethod
 
             if (newName.startsWith("get")) {
-                uniqueNewNames.add(newName.removePrefix("get").decapitalize())
+                uniqueNewNames.add(newName.removePrefix("get").decapitalizeFirstChar())
             } else if (newName.startsWith("set")) {
-                uniqueNewNames.add(newName.removePrefix("set").decapitalize())
+                uniqueNewNames.add(newName.removePrefix("set").decapitalizeFirstChar())
             } else if (newName.startsWith("is")) {
                 uniqueNewNames.add(newName)
             } else {
@@ -157,23 +157,26 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
     }
     private val remapMembers = object : KotlinStage() {
         override fun visitProperty(kProperty: KtProperty) {
+            val pId = kProperty.nameIdentifier ?: return
             val newName = remap(kProperty, kProperty) ?: return
-            write { kProperty.setName(newName) }
+            write { pId.replace(factory.createIdentifier(newName.quoteIfNeeded())) }
         }
 
         override fun visitNamedFunction(kFun: KtNamedFunction) {
+            val pId = kFun.nameIdentifier ?: return
             val newName = remap(kFun, kFun) ?: return
-            write { kFun.setName(newName) }
+            write { pId.replace(factory.createIdentifier(newName.quoteIfNeeded())) }
         }
 
         override fun visitParameter(kParam: KtParameter) {
             if (!kParam.hasValOrVar()) return
+            val pId = kParam.nameIdentifier ?: return
             val kFun = kParam.ownerFunction ?: return
             val pSafeElt = if (kFun is KtPrimaryConstructor) kFun.containingClassOrObject else kFun
             if (pSafeElt == null) return
 
             val newName = remap(pSafeElt, kParam) ?: return
-            write { kParam.setName(newName) }
+            write { pId.replace(factory.createIdentifier(newName.quoteIfNeeded())) }
         }
     }
     private val pMemberImportUsages = linkedSetMultiMap<FqName, PsiNamedElement>()
@@ -262,7 +265,7 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
 
                         val newTargetGetter =
                             if (newTargetSetter.startsWith("is")) newTargetSetter
-                            else "get" + newTargetSetter.capitalize()
+                            else "get" + newTargetSetter.capitalizeFirstChar()
                         if (mClass.methods.none { it.newName == newTargetGetter }) {
                             newTargetSetter = null
                         }

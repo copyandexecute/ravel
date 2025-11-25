@@ -3,6 +3,7 @@ package lol.bai.ravel.ui
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.module.Module
@@ -20,11 +21,12 @@ import kotlinx.coroutines.launch
 import lol.bai.ravel.mapping.MappingTree
 import lol.bai.ravel.mapping.MioClassMapping
 import lol.bai.ravel.mapping.MioMappingConfig
+import lol.bai.ravel.mapping.MutableMappingTree
 import lol.bai.ravel.remapper.Remapper
 import lol.bai.ravel.remapper.RemapperExtension
+import lol.bai.ravel.remapper.RemapperFactory
 import lol.bai.ravel.util.NoInline
 import lol.bai.ravel.util.listMultiMap
-import org.jetbrains.kotlin.asJava.classes.runReadAction
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -66,7 +68,7 @@ class RemapperAction : AnAction() {
 
         progress.fraction(null)
         progress.text(B("progress.readingMappings"))
-        val mTree = MappingTree()
+        val mTree = MutableMappingTree()
         model.mappings.first().tree.classes.forEach {
             mTree.putClass(MioClassMapping(model.mappings, it))
         }
@@ -74,7 +76,7 @@ class RemapperAction : AnAction() {
         data class Target(
             val vf: VirtualFile,
             val module: Module,
-            val remappers: List<Remapper>,
+            val factories: List<RemapperFactory>,
         )
 
         progress.fraction(null)
@@ -85,9 +87,7 @@ class RemapperAction : AnAction() {
             for (root in module.rootManager.sourceRoots) {
                 VfsUtil.iterateChildrenRecursively(root, null) v@{ vf ->
                     if (!vf.isFile) return@v true
-                    val remappers = factories
-                        .filter { it.matches(vf.extension ?: "") }
-                        .map { it.create() }
+                    val remappers = factories.filter { it.matches(vf.extension ?: "") }
                     if (remappers.isNotEmpty()) targets.add(Target(vf, module, remappers))
                     true
                 }
@@ -99,33 +99,50 @@ class RemapperAction : AnAction() {
         val fileWriters = listMultiMap<VirtualFile, () -> Unit>()
         var writersCount = 0
 
-        for ((vf, module, remappers) in targets) {
-            progress.fraction(fileIndex.toDouble() / fileCount.toDouble())
-            progress.text(B("progress.resolving", writersCount, fileIndex, fileCount))
-            progress.details(vf.path)
-            fileIndex++
+        fun remap(mTree: MappingTree, n: Int) {
+            val nText = if (n == 1) "" else " ($n)"
 
-            if (!vf.isFile) continue
-            runReadAction {
-                val scope = module.getModuleWithDependenciesAndLibrariesScope(true)
-                val write = Remapper.Write { writer ->
-                    fileWriters.put(vf, writer)
-                    writersCount++
-                }
+            var mTreeRerun: MutableMappingTree? = null
+            val rerun = Remapper.Rerun { modifier ->
+                if (mTreeRerun == null) mTreeRerun = MutableMappingTree()
+                modifier(mTreeRerun)
+            }
 
-                for (remapper in remappers) {
-                    val valid = remapper.init(project, scope, mTree, vf, write)
-                    if (!valid) continue
+            for ((vf, module, factories) in targets) {
+                progress.fraction(fileIndex.toDouble() / fileCount.toDouble())
+                progress.text(B("progress.resolving", writersCount, fileIndex, fileCount, nText))
+                progress.details(vf.path)
+                fileIndex++
 
-                    try {
-                        remapper.stages().forEach { it.invoke() }
-                    } catch (e: Exception) {
-                        write { remapper.fileComment("TODO(Ravel): Failed to fully resolve file: ${e.message}") }
-                        logger.error("Failed to fully resolve ${vf.path}", e)
+                if (!vf.isFile) continue
+                runReadAction {
+                    val scope = module.getModuleWithDependenciesAndLibrariesScope(true)
+                    val write = Remapper.Write { writer ->
+                        fileWriters.put(vf, writer)
+                        writersCount++
+                    }
+
+                    for (factory in factories) {
+                        val remapper = factory.create()
+                        val valid = remapper.init(project, scope, mTree, vf, write, rerun)
+                        if (!valid) continue
+
+                        try {
+                            remapper.stages().forEach { it.invoke() }
+                        } catch (e: Exception) {
+                            write { remapper.fileComment("TODO(Ravel): Failed to fully resolve file: ${e.message}") }
+                            logger.error("Failed to fully resolve ${vf.path}", e)
+                        }
                     }
                 }
             }
+
+            if (mTreeRerun != null) {
+                fileIndex = 0
+                remap(mTreeRerun, n + 1)
+            }
         }
+        remap(mTree, 1)
 
         logger.warn("Mapping resolved in ${System.currentTimeMillis() - time}ms")
         progress.fraction(null)

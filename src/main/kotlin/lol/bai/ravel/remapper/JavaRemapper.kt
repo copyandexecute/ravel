@@ -65,16 +65,19 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
     }
     private val remapMembers = object : JavaStage() {
         override fun visitField(pField: PsiField) {
+            val pId = pField.nameIdentifier
             val newFieldName = remap(pField) ?: return
-            write { pField.name = newFieldName }
+            write { pId.replace(factory.createIdentifier(newFieldName)) }
         }
 
         override fun visitMethod(pMethod: PsiMethod) {
+            val pId = pMethod.nameIdentifier ?: return
             val newMethodName = remap(pMethod, pMethod) ?: return
-            write { pMethod.name = newMethodName }
+            write { pId.replace(factory.createIdentifier(newMethodName)) }
         }
 
         override fun visitRecordComponent(pRecordComponent: PsiRecordComponent) {
+            val pId = pRecordComponent.nameIdentifier ?: return
             val pClass = pRecordComponent.containingClass ?: return
             val className = pClass.qualifiedName ?: return
 
@@ -104,8 +107,10 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
             }
 
             val uniqueNewGetterName = uniqueNewGetterNames.first()
-            mTree.getOrPut(pClass).putField(recordComponentName, uniqueNewGetterName)
-            write { pRecordComponent.name = uniqueNewGetterName }
+            if (recordComponentName == uniqueNewGetterName) return
+
+            write { pId.replace(factory.createIdentifier(uniqueNewGetterName)) }
+            rerun { it.getOrPut(pClass).putField(recordComponentName, uniqueNewGetterName) }
         }
     }
     private val pStaticImportUsages = linkedSetMultiMap<String, PsiMember>()

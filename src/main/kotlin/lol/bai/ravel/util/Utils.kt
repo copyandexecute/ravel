@@ -1,7 +1,7 @@
 package lol.bai.ravel.util
 
-fun String.capitalize() = replaceFirstChar { it.uppercase() }
-fun String.decapitalize() = replaceFirstChar { it.lowercase() }
+fun String.capitalizeFirstChar() = replaceFirstChar { it.uppercase() }
+fun String.decapitalizeFirstChar() = replaceFirstChar { it.lowercase() }
 
 fun wtf(): Nothing = throw UnsupportedOperationException()
 

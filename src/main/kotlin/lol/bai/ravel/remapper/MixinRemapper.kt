@@ -5,7 +5,8 @@ import com.intellij.psi.*
 import lol.bai.ravel.mapping.ClassMapping
 import lol.bai.ravel.psi.jvmDesc
 import lol.bai.ravel.psi.jvmName
-import lol.bai.ravel.util.decapitalize
+import lol.bai.ravel.util.capitalizeFirstChar
+import lol.bai.ravel.util.decapitalizeFirstChar
 import lol.bai.ravel.util.setMultiMap
 
 // @formatter:off
@@ -69,6 +70,17 @@ private object Point {
     // @formatter:on
 
     val INVOKES = setOf(INVOKE, INVOKE_ASSIGN, INVOKE_STRING)
+}
+
+private object AccessorPrefixes {
+    // @formatter:off
+    val get    = Regex("^((\\w+[_$])?get)(.+)$")
+    val set    = Regex("^((\\w+[_$])?set)(.+)$")
+    val is_    = Regex("^((\\w+[_$])?is)(.+)$")
+
+    val call   = Regex("^((\\w+[_$])?call)(.+)$")
+    val invoke = Regex("^((\\w+[_$])?invoke)(.+)$")
+    // @formatter:on
 }
 
 class MixinRemapperFactory : ConstRemapperFactory(::MixinRemapper, "java")
@@ -192,22 +204,29 @@ class MixinRemapper : JavaRemapper() {
             val (pTargetClass, mTargetClass) = targetClass(pMethod) ?: return@a
 
             var targetSignature: String? = null
-            var targetMethodName = when {
-                methodName.startsWith("call") -> methodName.removePrefix("call").decapitalize()
-                methodName.startsWith("invoke") -> methodName.removePrefix("invoke").decapitalize()
-                else -> null
-            }
+            var invokerPrefix = (
+                AccessorPrefixes.call.matchEntire(methodName)
+                    ?: AccessorPrefixes.invoke.matchEntire(methodName)
+                )?.groups?.get(1)?.value
+
+            var targetMethodName =
+                if (invokerPrefix != null) methodName.removePrefix(invokerPrefix).decapitalizeFirstChar()
+                else null
 
             val pValue = pAnnotation.findDeclaredAttributeValue("value")
             if (pValue is PsiLiteralExpression) {
+                var explicitTargetMethodName: String? = null
                 val value = pValue.value as String
                 if (value == "<init>") return@a
                 if (value.contains('(')) {
-                    targetMethodName = value.substringBefore('(')
-                    targetSignature = value.removePrefix(targetMethodName)
+                    explicitTargetMethodName = value.substringBefore('(')
+                    targetSignature = value.removePrefix(explicitTargetMethodName)
                 } else {
-                    targetMethodName = value
+                    explicitTargetMethodName = value
                 }
+                if (explicitTargetMethodName == methodName) invokerPrefix = ""
+                else if (explicitTargetMethodName != targetMethodName) invokerPrefix = null
+                targetMethodName = explicitTargetMethodName
             }
 
             if (targetMethodName == null) {
@@ -227,8 +246,12 @@ class MixinRemapper : JavaRemapper() {
                 newMethodName = mTargetMethod.newName ?: return@a
             }
 
-            write {
-                pAnnotation.setDeclaredAttributeValue("value", factory.createExpressionFromText("\"${newMethodName}\"", pAnnotation))
+            if (pValue != null) {
+                write { pAnnotation.setDeclaredAttributeValue("value", factory.createExpressionFromText("\"${newMethodName}\"", pAnnotation)) }
+            }
+            if (invokerPrefix != null) {
+                val newInvokerName = invokerPrefix + newMethodName.capitalizeFirstChar()
+                rerun { it.getOrPut(pClass).putMethod(pMethod.name, pMethod.jvmDesc, newInvokerName) }
             }
             return@a
         }
@@ -238,15 +261,23 @@ class MixinRemapper : JavaRemapper() {
             val methodName = pMethod.name
             val mTargetClass = targetClass(pMethod)?.second ?: return@a
 
-            var targetFieldName = when {
-                methodName.startsWith("get") -> methodName.removePrefix("get").decapitalize()
-                methodName.startsWith("set") -> methodName.removePrefix("set").decapitalize()
-                methodName.startsWith("is") -> methodName.removePrefix("is").decapitalize()
-                else -> null
-            }
+            var accessorPrefix = (
+                AccessorPrefixes.get.matchEntire(methodName)
+                    ?: AccessorPrefixes.set.matchEntire(methodName)
+                    ?: AccessorPrefixes.is_.matchEntire(methodName)
+                )?.groups?.get(1)?.value
+
+            var targetFieldName =
+                if (accessorPrefix != null) methodName.removePrefix(accessorPrefix).decapitalizeFirstChar()
+                else null
 
             val pValue = pAnnotation.findDeclaredAttributeValue("value")
-            if (pValue is PsiLiteralExpression) targetFieldName = pValue.value as String
+            if (pValue is PsiLiteralExpression) {
+                val explicitTargetFieldName = pValue.value as String
+                if (explicitTargetFieldName == methodName) accessorPrefix = ""
+                else if (explicitTargetFieldName != targetFieldName) accessorPrefix = null
+                targetFieldName = explicitTargetFieldName
+            }
 
             if (targetFieldName == null) {
                 write { comment(pMethod, "TODO(Ravel): No target field") }
@@ -256,8 +287,13 @@ class MixinRemapper : JavaRemapper() {
 
             val mTargetField = mTargetClass.getField(targetFieldName) ?: return@a
             val newFieldName = mTargetField.newName ?: return@a
-            write {
-                pAnnotation.setDeclaredAttributeValue("value", factory.createExpressionFromText("\"${newFieldName}\"", null))
+
+            if (pValue != null) {
+                write { pAnnotation.setDeclaredAttributeValue("value", factory.createExpressionFromText("\"${newFieldName}\"", null)) }
+            }
+            if (accessorPrefix != null) {
+                val newAccessorName = accessorPrefix + newFieldName.capitalizeFirstChar()
+                rerun { it.getOrPut(pClass).putMethod(methodName, pMethod.jvmDesc, newAccessorName) }
             }
             return@a
         }
@@ -575,10 +611,11 @@ class MixinRemapper : JavaRemapper() {
             if (newMemberName == null) return@a
             if (memberNameHasPrefix) newMemberName = prefix + newMemberName
 
-            val mClass = mTree.getOrPut(pClass)
-            if (pMember is PsiField) mClass.putField(pMember.name, newMemberName)
-            else if (pMember is PsiMethod) mClass.putMethod(pMember.name, pMember.jvmDesc, newMemberName)
-
+            rerun {
+                val mClass = it.getOrPut(pClass)
+                if (pMember is PsiField) mClass.putField(memberName, newMemberName)
+                else if (pMember is PsiMethod) mClass.putMethod(memberName, pMember.jvmDesc, newMemberName)
+            }
             return@a
         }
 
