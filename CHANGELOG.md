@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [0.4.1]
+
+- Mixin: fixed `@At` target not being remapped
+
 ## [0.4.0]
 
 - UI: fixed progress modal not showing
@@ -55,7 +59,8 @@
 
 - Initial release
 
-[Unreleased]: https://github.com/badasintended/ravel/compare/0.4.0...HEAD
+[Unreleased]: https://github.com/badasintended/ravel/compare/0.4.1...HEAD
+[0.4.1]: https://github.com/badasintended/ravel/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/badasintended/ravel/compare/0.3.3...0.4.0
 [0.3.3]: https://github.com/badasintended/ravel/compare/0.3.2...0.3.3
 [0.3.2]: https://github.com/badasintended/ravel/compare/0.3.1...0.3.2
