@@ -32,6 +32,7 @@ private const val ModifyConstant = "${mixin}.injection.ModifyConstant"
 private const val ModifyVariable = "${mixin}.injection.ModifyVariable"
 private const val Redirect       = "${mixin}.injection.Redirect"
 private const val Coerce         = "${mixin}.injection.Coerce"
+private const val Constant       = "${mixin}.injection.Constant"
 
 private const val mixinextras           = "com.llamalad7.mixinextras"
 private const val ModifyExpressionValue = "${mixinextras}.injector.ModifyExpressionValue"
@@ -124,6 +125,7 @@ class MixinRemapper : JavaRemapper() {
         if (annotationName == Dynamic) return@a
         if (annotationName == Pseudo) return@a
         if (annotationName == Coerce) return@a
+        if (annotationName == Constant) return@a
 
         fun warnNotLiterals(pElt: PsiElement) {
             write { comment(pElt, "TODO(Ravel): target not a literal or array of literals") }
