@@ -7,7 +7,6 @@ import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.module.Module
-import com.intellij.openapi.progress.currentThreadCoroutineScope
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.rootManager
 import com.intellij.openapi.vfs.VfsUtil
@@ -15,9 +14,8 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.isFile
 import com.intellij.platform.ide.progress.ModalTaskOwner
 import com.intellij.platform.ide.progress.TaskCancellation
-import com.intellij.platform.ide.progress.withModalProgress
+import com.intellij.platform.ide.progress.runWithModalProgressBlocking
 import com.intellij.platform.util.progress.RawProgressReporter
-import kotlinx.coroutines.launch
 import lol.bai.ravel.mapping.MappingTree
 import lol.bai.ravel.mapping.MioClassMapping
 import lol.bai.ravel.mapping.MioMappingConfig
@@ -53,12 +51,10 @@ class RemapperAction : AnAction() {
         if (!ok) return
         if (model.mappings.isEmpty() || model.modules.isEmpty()) return
 
-        currentThreadCoroutineScope().launch {
-            withModalProgress(ModalTaskOwner.project(project), B("dialog.remapper.title"), TaskCancellation.nonCancellable()) {
-                suspendCoroutine<Any> { cont ->
-                    NoInline.reportRawProgress(cont) { remap(project, model, it) }
-                    cont.resume(Unit)
-                }
+        runWithModalProgressBlocking(ModalTaskOwner.project(project), B("dialog.remapper.title"), TaskCancellation.nonCancellable()) {
+            suspendCoroutine<Any> { cont ->
+                NoInline.reportRawProgress(cont) { remap(project, model, it) }
+                cont.resume(Unit)
             }
         }
     }
