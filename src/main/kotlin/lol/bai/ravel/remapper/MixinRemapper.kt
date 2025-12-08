@@ -187,10 +187,19 @@ class MixinRemapper : JavaRemapper() {
             }
 
             if (newTargetNames.size == 1) {
-                val (targetClassName, newTargetClassName) = newTargetNames.first()
+                fun renameClass(pair: Pair<String, String?>): Boolean {
+                    val (targetClassName, newTargetClassName) = pair
+                    if (newTargetClassName != null && className.contains(targetClassName)) {
+                        rerun { mTree.putClass(classJvmName, classJvmName.replace(targetClassName, newTargetClassName)) }
+                        return true
+                    }
+                    return false
+                }
 
-                if (newTargetClassName != null && className.contains(targetClassName)) {
-                    rerun { mTree.putClass(classJvmName, classJvmName.replace(targetClassName, newTargetClassName)) }
+                if (!renameClass(newTargetNames.first())) {
+                    renameClass(newTargetNames.first().let { (a, b) ->
+                        a.replace('$', '_') to b?.replace('$', '_')
+                    })
                 }
             }
 
