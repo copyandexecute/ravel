@@ -97,8 +97,14 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
         }
 
         override fun visitMethod(pMethod: PsiMethod) {
+            val pClass = pMethod.containingClass ?: return
             val pId = pMethod.nameIdentifier ?: return
-            val newMethodName = remap(pMethod, pMethod) ?: return
+
+            val newMethodName =
+                if (pMethod.isConstructor) mTree.get(pClass)?.newFullPeriodName?.substringAfterLast('.')
+                else remap(pMethod, pMethod)
+            if (newMethodName == null) return
+
             write { pId.replace(factory.createIdentifier(newMethodName)) }
         }
 
