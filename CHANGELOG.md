@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.4.2]
+
+- Java: remap class constructor
+- Java/Kotlin: call super on element visitor, this fixed many issues
+- Mixin: handle `_` as inner class separator when renaming class
+
 ## [0.4.1]
 
 - Mixin: fixed `@At` target not being remapped
@@ -59,7 +65,8 @@
 
 - Initial release
 
-[Unreleased]: https://github.com/badasintended/ravel/compare/0.4.1...HEAD
+[Unreleased]: https://github.com/badasintended/ravel/compare/0.4.2...HEAD
+[0.4.2]: https://github.com/badasintended/ravel/compare/0.4.1...0.4.2
 [0.4.1]: https://github.com/badasintended/ravel/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/badasintended/ravel/compare/0.3.3...0.4.0
 [0.3.3]: https://github.com/badasintended/ravel/compare/0.3.2...0.3.3
