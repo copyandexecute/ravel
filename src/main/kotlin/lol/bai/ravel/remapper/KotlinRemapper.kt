@@ -150,6 +150,7 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
     private val nonFqnClassNames = hashMapOf<String, String>()
     private val collectClassNames = object : KotlinStage() {
         override fun visitClassOrObject(kClass: KtClassOrObject) {
+            super.visitClassOrObject(kClass)
             val className = kClass.name ?: return
             val classJvmName = kClass.jvmName ?: return
             nonFqnClassNames[className] = classJvmName
@@ -157,18 +158,21 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
     }
     private val remapMembers = object : KotlinStage() {
         override fun visitProperty(kProperty: KtProperty) {
+            super.visitProperty(kProperty)
             val pId = kProperty.nameIdentifier ?: return
             val newName = remap(kProperty, kProperty) ?: return
             write { pId.replace(factory.createIdentifier(newName.quoteIfNeeded())) }
         }
 
         override fun visitNamedFunction(kFun: KtNamedFunction) {
+            super.visitNamedFunction(kFun)
             val pId = kFun.nameIdentifier ?: return
             val newName = remap(kFun, kFun) ?: return
             write { pId.replace(factory.createIdentifier(newName.quoteIfNeeded())) }
         }
 
         override fun visitParameter(kParam: KtParameter) {
+            super.visitParameter(kParam)
             if (!kParam.hasValOrVar()) return
             val pId = kParam.nameIdentifier ?: return
             val kFun = kParam.ownerFunction ?: return
@@ -189,6 +193,7 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
         }
 
         override fun visitSimpleNameExpression(kRef: KtSimpleNameExpression) {
+            super.visitSimpleNameExpression(kRef)
             val kRefParent = kRef.parent
             if (kRefParent is KtSuperExpression) return
             if (kRefParent is KtThisExpression) return
@@ -413,6 +418,7 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
     }
     private val remapArrayReferences = object : KotlinStage() {
         override fun visitArrayAccessExpression(kRef: KtArrayAccessExpression) {
+            super.visitArrayAccessExpression(kRef)
             val pRef = kRef.reference() ?: return
             val pTarget = pRef.resolve() as? PsiNamedElement ?: return
             val pSafeParent = kRef.parent<PsiNamedElement>() ?: pFile
@@ -434,6 +440,7 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
     }
     private val remapImports = object : KotlinStage() {
         override fun visitImportDirective(kImport: KtImportDirective) {
+            super.visitImportDirective(kImport)
             val kRefExp = kImport.importedReference ?: return
             val kRefSelector =
                 if (kRefExp is KtDotQualifiedExpression) kRefExp.selectorExpression

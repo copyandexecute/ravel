@@ -58,6 +58,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
     private val nonFqnClassNames = hashMapOf<String, String>()
     private val remapClassName = object : JavaStage() {
         override fun visitClass(pClass: PsiClass) {
+            super.visitClass(pClass)
             val className = pClass.name ?: return
             val classJvmName = pClass.jvmName ?: return
 
@@ -75,6 +76,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
     }
     private val remapPackage = object : JavaStage() {
         override fun visitPackageStatement(pStatement: PsiPackageStatement) {
+            super.visitPackageStatement(pStatement)
             val pPackageRef = pStatement.packageReference ?: return
 
             val newPackageNames = topLevelClasses.values.map { it.substringBeforeLast('/') }.toSet()
@@ -91,12 +93,14 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
     }
     private val remapMembers = object : JavaStage() {
         override fun visitField(pField: PsiField) {
+            super.visitField(pField)
             val pId = pField.nameIdentifier
             val newFieldName = remap(pField) ?: return
             write { pId.replace(factory.createIdentifier(newFieldName)) }
         }
 
         override fun visitMethod(pMethod: PsiMethod) {
+            super.visitMethod(pMethod)
             val pClass = pMethod.containingClass ?: return
             val pId = pMethod.nameIdentifier ?: return
 
@@ -109,6 +113,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
         }
 
         override fun visitRecordComponent(pRecordComponent: PsiRecordComponent) {
+            super.visitRecordComponent(pRecordComponent)
             val pId = pRecordComponent.nameIdentifier ?: return
             val pClass = pRecordComponent.containingClass ?: return
             val className = pClass.qualifiedName ?: return
@@ -148,6 +153,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
     private val pStaticImportUsages = linkedSetMultiMap<String, PsiMember>()
     private val remapReferences = object : JavaStage() {
         override fun visitReferenceElement(pRef: PsiJavaCodeReferenceElement) {
+            super.visitReferenceElement(pRef)
             if (pRef is PsiImportStaticReferenceElement) return
             val pRefId = pRef.referenceNameElement as? PsiIdentifier ?: return
 
@@ -173,13 +179,6 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
             }
 
             fun replaceClass(pClass: PsiClass, pClassRef: PsiJavaCodeReferenceElement) {
-                pClassRef.parameterList?.typeParameterElements?.forEach { pParam ->
-                    pParam.processChildren p@{ pParamRef: PsiJavaCodeReferenceElement ->
-                        val pParamClass = pParamRef.resolve() as? PsiClass ?: return@p
-                        replaceClass(pParamClass, pParamRef)
-                    }
-                }
-
                 val pClassRefId = pClassRef.referenceNameElement as? PsiIdentifier ?: return
                 val mClass = mTree.get(pClass) ?: return
                 val newJvmClassName = mClass.newName ?: return
@@ -214,6 +213,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
     }
     private val remapStaticImports = object : JavaStage() {
         override fun visitImportStaticReferenceElement(pRef: PsiImportStaticReferenceElement) {
+            super.visitImportStaticReferenceElement(pRef)
             val pRefId = pRef.referenceNameElement as? PsiIdentifier ?: return
             val pStatement = pRef.parent<PsiImportStaticStatement>() ?: return
             val pClass = pRef.classReference.resolve() as? PsiClass ?: return
@@ -247,6 +247,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
     }
     private val remapDocTagValues = object : JavaStage() {
         override fun visitDocTagValue(pValue: PsiDocTagValue) {
+            super.visitDocTagValue(pValue)
             val pRef = pValue.reference ?: return
             val pRefTarget = pRef.resolve() ?: return
 
