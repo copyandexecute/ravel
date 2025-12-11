@@ -74,6 +74,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
             write { pId.replace(factory.createIdentifier(newClassName)) }
         }
     }
+    private var newPackageName: String? = null
     private val remapPackage = object : JavaStage() {
         override fun visitPackageStatement(pStatement: PsiPackageStatement) {
             super.visitPackageStatement(pStatement)
@@ -87,8 +88,8 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
                 return
             }
 
-            val newPackageName = newPackageNames.first().replace('/', '.')
-            write { pPackageRef.replace(factory.createPackageReferenceElement(newPackageName)) }
+            newPackageName = newPackageNames.first().replace('/', '.')
+            write { pPackageRef.replace(factory.createPackageReferenceElement(newPackageName!!)) }
         }
     }
     private val remapMembers = object : JavaStage() {
@@ -274,22 +275,20 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
 
         val className = pClass.name ?: return@s
         val classJvmName = pClass.jvmName ?: return@s
-        if (classJvmName == newClassJvmName) return@s
-        if (file.nameWithoutExtension != className) return@s
 
-        write {
-            val packageDir = classJvmName.substringBeforeLast('/')
-            val newPackageDir = newClassJvmName.substringBeforeLast('/')
+        val packageDir = classJvmName.substringBeforeLast('/')
+        val newPackageDir = newPackageName?.replace('.', '/')
 
-            if (packageDir != newPackageDir) {
-                var rootDir = file.parent
-                repeat(packageDir.split('/').size) {
-                    rootDir = rootDir.parent
-                }
-
-                file.move(null, VfsUtil.createDirectoryIfMissing(rootDir, newPackageDir))
+        if (newPackageDir != null && packageDir != newPackageDir) write {
+            var rootDir = file.parent
+            repeat(packageDir.split('/').size) {
+                rootDir = rootDir.parent
             }
 
+            file.move(null, VfsUtil.createDirectoryIfMissing(rootDir, newPackageDir))
+        }
+
+        if (classJvmName != newClassJvmName && file.nameWithoutExtension == className) write {
             val newClassName = newClassJvmName.substringAfterLast('/')
             file.rename(null, "${newClassName}.java")
         }
