@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.5.0]
+
+- Java: added support for star imports, now adding new missing imports
+- Java: fixed class file not moved when only the package path changed
+- Kotlin: added support for renaming in-project classes
+
 ## [0.4.2]
 
 - Java: remap class constructor
@@ -65,7 +71,8 @@
 
 - Initial release
 
-[Unreleased]: https://github.com/badasintended/ravel/compare/0.4.2...HEAD
+[Unreleased]: https://github.com/badasintended/ravel/compare/0.5.0...HEAD
+[0.5.0]: https://github.com/badasintended/ravel/compare/0.4.2...0.5.0
 [0.4.2]: https://github.com/badasintended/ravel/compare/0.4.1...0.4.2
 [0.4.1]: https://github.com/badasintended/ravel/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/badasintended/ravel/compare/0.3.3...0.4.0
