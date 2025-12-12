@@ -29,6 +29,8 @@ Supports remapping:
 
 ## Usage
 
+### See the page at [Fabric Docs](https://docs.fabricmc.net/develop/migrating-mappings/ravel) for remapping Fabric Mods!
+
 1. **Commit any changes before attempting to remap your sources!**
 
 2. Right-click the code editor and go to **Refactor** - **Remap Using Ravel**    
