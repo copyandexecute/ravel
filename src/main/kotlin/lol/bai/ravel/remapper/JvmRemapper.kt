@@ -1,8 +1,10 @@
 package lol.bai.ravel.remapper
 
 import com.intellij.openapi.diagnostic.thisLogger
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.psi.*
 import lol.bai.ravel.psi.jvmDesc
+import lol.bai.ravel.psi.jvmName
 
 abstract class JvmRemapper<F : PsiClassOwner>(
     caster: (PsiFile?) -> F?
@@ -56,5 +58,32 @@ abstract class JvmRemapper<F : PsiClassOwner>(
 
         val newMethodName = uniqueNewMethodNames.first()
         return if (newMethodName == pMethod.name) null else newMethodName
+    }
+
+    protected fun renameFile(newPackageName: String?, topLevelClasses: Map<PsiClass, String>) {
+        if (topLevelClasses.isEmpty()) return
+
+        val fileClassName = file.nameWithoutExtension
+        val (pClass, newClassJvmName) = topLevelClasses.entries
+            .firstOrNull { it.key.name == fileClassName }
+            ?: return
+        val classJvmName = pClass.jvmName ?: return
+
+        val packageDir = classJvmName.substringBeforeLast('/')
+        val newPackageDir = newPackageName?.replace('.', '/')
+
+        if (newPackageDir != null && packageDir != newPackageDir) write {
+            var rootDir = file.parent
+            repeat(packageDir.split('/').size) {
+                rootDir = rootDir.parent
+            }
+
+            file.move(null, VfsUtil.createDirectoryIfMissing(rootDir, newPackageDir))
+        }
+
+        if (classJvmName != newClassJvmName) write {
+            val newClassName = newClassJvmName.substringAfterLast('/')
+            file.rename(null, "${newClassName}.${file.extension}")
+        }
     }
 }

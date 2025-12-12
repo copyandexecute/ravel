@@ -1,11 +1,13 @@
 package lol.bai.ravel.remapper
 
 import com.intellij.openapi.diagnostic.thisLogger
-import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.psi.*
 import com.intellij.psi.javadoc.PsiDocTagValue
 import lol.bai.ravel.mapping.rawQualifierSeparators
-import lol.bai.ravel.psi.*
+import lol.bai.ravel.psi.implicitly
+import lol.bai.ravel.psi.jvmDesc
+import lol.bai.ravel.psi.jvmName
+import lol.bai.ravel.psi.jvmRaw
 import lol.bai.ravel.util.linkedSetMultiMap
 
 class JavaRemapperFactory : ExtensionRemapperFactory(::JavaRemapper, "java")
@@ -78,7 +80,6 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
     private val remapPackage = object : JavaStage() {
         override fun visitPackageStatement(pStatement: PsiPackageStatement) {
             super.visitPackageStatement(pStatement)
-            val pPackageRef = pStatement.packageReference ?: return
 
             val newPackageNames = topLevelClasses.values.map { it.substringBeforeLast('/') }.toSet()
             if (newPackageNames.size != 1) {
@@ -89,7 +90,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
             }
 
             newPackageName = newPackageNames.first().replace('/', '.')
-            write { pPackageRef.replace(factory.createPackageReferenceElement(newPackageName!!)) }
+            write { pStatement.replace(factory.createPackageStatement(newPackageName!!)) }
         }
     }
     private val remapMembers = object : JavaStage() {
@@ -266,31 +267,5 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
             }
         }
     }
-    private val renameFile = Stage s@{
-        if (topLevelClasses.isEmpty()) return@s
-
-        val (pClass, newClassJvmName) = topLevelClasses.entries
-            .firstOrNull { it.key.explicitly(PsiModifier.PUBLIC) }
-            ?: topLevelClasses.firstEntry()
-
-        val className = pClass.name ?: return@s
-        val classJvmName = pClass.jvmName ?: return@s
-
-        val packageDir = classJvmName.substringBeforeLast('/')
-        val newPackageDir = newPackageName?.replace('.', '/')
-
-        if (newPackageDir != null && packageDir != newPackageDir) write {
-            var rootDir = file.parent
-            repeat(packageDir.split('/').size) {
-                rootDir = rootDir.parent
-            }
-
-            file.move(null, VfsUtil.createDirectoryIfMissing(rootDir, newPackageDir))
-        }
-
-        if (classJvmName != newClassJvmName && file.nameWithoutExtension == className) write {
-            val newClassName = newClassJvmName.substringAfterLast('/')
-            file.rename(null, "${newClassName}.java")
-        }
-    }
+    private val renameFile = Stage s@{ renameFile(newPackageName, topLevelClasses) }
 }

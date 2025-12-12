@@ -6,6 +6,7 @@ import lol.bai.ravel.psi.implicitly
 import lol.bai.ravel.psi.jvmName
 import lol.bai.ravel.util.*
 import org.jetbrains.kotlin.asJava.canHaveSyntheticGetter
+import org.jetbrains.kotlin.asJava.toLightClass
 import org.jetbrains.kotlin.asJava.toLightElements
 import org.jetbrains.kotlin.asJava.toLightMethods
 import org.jetbrains.kotlin.idea.base.psi.kotlinFqName
@@ -32,12 +33,14 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
         override fun invoke() = pFile.accept(this)
     }
 
-    override fun stages() = listOf<Stage>(
-        collectClassNames,
+    override fun stages() = listOf(
+        remapClassNames,
+        remapPackage,
         remapMembers,
         remapReferences,
         remapArrayReferences,
         remapImports,
+        renameFile,
     )
 
     private lateinit var factory: KtPsiFactory
@@ -147,13 +150,43 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
         return uniqueNewNames.first()
     }
 
+    private val topLevelClasses = linkedMapOf<PsiClass, String>()
     private val nonFqnClassNames = hashMapOf<String, String>()
-    private val collectClassNames = object : KotlinStage() {
+    private val remapClassNames = object : KotlinStage() {
         override fun visitClassOrObject(kClass: KtClassOrObject) {
             super.visitClassOrObject(kClass)
             val className = kClass.name ?: return
             val classJvmName = kClass.jvmName ?: return
-            nonFqnClassNames[className] = classJvmName
+
+            val jClass = kClass.toLightClass() ?: return
+            val mClass = mTree.get(jClass)
+            val newClassJvmName = mClass?.newName
+            val newClassName = mClass?.newFullPeriodName?.substringAfterLast('.')
+
+            nonFqnClassNames[newClassName ?: className] = newClassJvmName ?: classJvmName
+            if (kClass.containingClassOrObject == null) topLevelClasses[jClass] = newClassJvmName ?: classJvmName
+
+            if (newClassName == null) return
+            val pId = kClass.nameIdentifier ?: return
+            write { pId.replace(factory.createIdentifier(newClassName)) }
+        }
+    }
+    private var newPackageName: String? = null
+    private val remapPackage = object : KotlinStage() {
+        override fun visitPackageDirective(kPackage: KtPackageDirective) {
+            super.visitPackageDirective(kPackage)
+            if (topLevelClasses.isEmpty()) return
+
+            val newPackageNames = topLevelClasses.values.map { it.substringBeforeLast('/') }.toSet()
+            if (newPackageNames.size != 1) {
+                logger.warn("File contains classes with different new packages")
+                val comment = topLevelClasses.map { (k, v) -> "${k.name} -> $v" }.joinToString(separator = "\n")
+                write { comment(kPackage, "TODO(Ravel): file contains classes with different new packages\n$comment") }
+                return
+            }
+
+            newPackageName = newPackageNames.first().replace('/', '.')
+            write { kPackage.replace(factory.createPackageDirective(FqName(newPackageName!!))) }
         }
     }
     private val remapMembers = object : KotlinStage() {
@@ -480,4 +513,5 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
             write { kRefSelector.replace(factory.createExpression(uniqueNewNames.first())) }
         }
     }
+    private val renameFile = Stage s@{ renameFile(newPackageName, topLevelClasses) }
 }
