@@ -39,6 +39,8 @@ abstract class Remapper {
     }
 
     abstract fun fileComment(comment: String)
+    fun fileTodo(comment: String) = fileComment("TODO(Ravel): $comment")
+
     abstract fun stages(): List<Stage>
 
     fun interface Stage {

@@ -77,7 +77,7 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
 
         if (newNames.size != jElts.size) {
             logger.warn("cannot resolve property ${kProperty.name}")
-            write { comment(pSafeElt, "TODO(Ravel): cannot resolve property ${kProperty.name}") }
+            write { todo(pSafeElt, "cannot resolve property ${kProperty.name}") }
             return null
         }
 
@@ -99,7 +99,7 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
                 uniqueNewNames.add(newName)
             } else {
                 logger.warn("property ${kProperty.name} have get/setter that overrides method which new name is not named get*/set*/is*")
-                write { comment(pSafeElt, "TODO(Ravel): property ${kProperty.name} have get/setter overrides method which new name is not named get*/set*/is*") }
+                write { todo(pSafeElt, "property ${kProperty.name} have get/setter overrides method which new name is not named get*/set*/is*") }
                 return null
             }
         }
@@ -111,7 +111,7 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
                 .map { (it.key as PsiMethod).name to it.value.value }
                 .joinToString { "${it.first} -> ${it.second}" }
             logger.warn("property ${kProperty.name} overrides getters/setters with different new names")
-            write { comment(pSafeElt, "TODO(Ravel): property ${kProperty.name} overrides getters/setters with different new names\n$comment") }
+            write { todo(pSafeElt, "property ${kProperty.name} overrides getters/setters with different new names\n$comment") }
             return null
         }
 
@@ -127,7 +127,7 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
 
         if (newNames.size != jMethods.size) {
             logger.warn("cannot resolve function ${kFun.name}")
-            write { comment(pSafeElt, "TODO(Ravel): cannot resolve function ${kFun.name}") }
+            write { todo(pSafeElt, "cannot resolve function ${kFun.name}") }
             return null
         }
 
@@ -143,7 +143,7 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
                 .map { it.key.name to it.value.value }
                 .joinToString { "${it.first} -> ${it.second}" }
             logger.warn("function ${kFun.name} overrides methods with different new names")
-            write { comment(pSafeElt, "TODO(Ravel): function ${kFun.name} overrides methods with different new names\n$comment") }
+            write { todo(pSafeElt, "function ${kFun.name} overrides methods with different new names\n$comment") }
             return null
         }
 
@@ -181,7 +181,7 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
             if (newPackageNames.size != 1) {
                 logger.warn("File contains classes with different new packages")
                 val comment = topLevelClasses.map { (k, v) -> "${k.name} -> $v" }.joinToString(separator = "\n")
-                write { comment(kPackage, "TODO(Ravel): file contains classes with different new packages\n$comment") }
+                write { todo(kPackage, "file contains classes with different new packages\n$comment") }
                 return
             }
 
@@ -506,7 +506,7 @@ class KotlinRemapper : JvmRemapper<KtFile>({ it as? KtFile }) {
                     .map { (k, v) -> "${k.name} -> ${v.value}" }
                     .joinToString(separator = "\n")
                 logger.warn("ambiguous import, members with name $memberName have different new names")
-                write { comment(kImport, "TODO(Ravel): ambiguous import, members with name $memberName have different new names\n$comment") }
+                write { todo(kImport, "ambiguous import, members with name $memberName have different new names\n$comment") }
                 return
             }
 

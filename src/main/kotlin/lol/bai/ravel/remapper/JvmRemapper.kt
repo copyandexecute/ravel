@@ -44,7 +44,7 @@ abstract class JvmRemapper<F : PsiClassOwner>(
         if (newMethodNames.isEmpty()) return null
         if (newMethodNames.size != pSuperMethods.size) {
             logger.warn("could not resolve all method origins")
-            write { comment(pSafeElt, "TODO(Ravel): could not resolve all method origins") }
+            write { todo(pSafeElt, "could not resolve all method origins") }
             return null
         }
 
@@ -52,7 +52,7 @@ abstract class JvmRemapper<F : PsiClassOwner>(
         if (uniqueNewMethodNames.size != 1) {
             logger.warn("method origins have different new names")
             val comment = newMethodNames.map { (k, v) -> "$k -> $v" }.joinToString(separator = "\n")
-            write { comment(pSafeElt, "TODO(Ravel): method origins have different new names\n$comment") }
+            write { todo(pSafeElt, "method origins have different new names\n$comment") }
             return null
         }
 

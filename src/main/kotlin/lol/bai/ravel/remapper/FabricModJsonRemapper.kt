@@ -17,14 +17,14 @@ class FabricModJsonRemapper : JsonRemapper() {
         val schemaVersionProp = root.findProperty("schemaVersion")
         if (schemaVersionProp == null) {
             logger.warn("Schema version not specified")
-            write { comment(root, "TODO(Ravel): No schemaVersion found, only version 1 is supported") }
+            write { todo(root, "No schemaVersion found, only version 1 is supported") }
             return@s
         }
 
         val schemaVersion = (schemaVersionProp.value as? JsonNumberLiteral)?.value
         if (schemaVersion == null || schemaVersion.toInt() != 1) {
             logger.warn("Schema version != 1")
-            write { comment(schemaVersionProp, "TODO(Ravel): only schemaVersion 1 is supported") }
+            write { todo(schemaVersionProp, "only schemaVersion 1 is supported") }
             return@s
         }
 
@@ -50,7 +50,7 @@ class FabricModJsonRemapper : JsonRemapper() {
                 if (newMemberNames.size != 1) {
                     logger.warn("members have different new names")
                     val comment = mMembers.joinToString(separator = "\n") { "${it.oldName} -> ${it.newName ?: it.oldName}" }
-                    write { comment(property, "TODO(Ravel): members different new names\n$comment") }
+                    write { todo(property, "members different new names\n$comment") }
                     return
                 }
 

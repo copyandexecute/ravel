@@ -126,7 +126,7 @@ class RemapperAction : AnAction() {
                         try {
                             remapper.stages().forEach { it.invoke() }
                         } catch (e: Exception) {
-                            write { remapper.fileComment("TODO(Ravel): Failed to fully resolve file: ${e.message}") }
+                            write { remapper.fileTodo("Failed to fully resolve file: ${e.message}") }
                             logger.error("Failed to fully resolve ${vf.path}", e)
                         }
                     }

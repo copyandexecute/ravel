@@ -21,6 +21,7 @@ abstract class PsiRemapper<F : PsiFile>(
 
     abstract fun comment(pElt: PsiElement, comment: String)
     override fun fileComment(comment: String) = comment(pFile, comment)
+    fun todo(pElt: PsiElement, comment: String) = comment(pElt, "TODO(Ravel): $comment")
 
     protected inline fun <reified E : PsiElement> psiStage(crossinline action: (E) -> Unit): Stage = Stage { pFile.processChildren(action) }
 

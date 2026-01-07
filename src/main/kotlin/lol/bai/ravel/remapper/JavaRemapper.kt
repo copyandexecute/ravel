@@ -97,7 +97,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
             if (newPackageNames.size != 1) {
                 logger.warn("File contains classes with different new packages")
                 val comment = topLevelClasses.map { (k, v) -> "${k.name} -> $v" }.joinToString(separator = "\n")
-                write { comment(pStatement, "TODO(Ravel): file contains classes with different new packages\n$comment") }
+                write { todo(pStatement, "file contains classes with different new packages\n$comment") }
                 return
             }
 
@@ -153,7 +153,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
             if (uniqueNewGetterNames.size != 1) {
                 logger.warn("$className: record component '$recordComponentName' overrides methods with different new names")
                 val comment = newGetterName.map { (k, v) -> "$k -> $v" }.joinToString(separator = "\n")
-                write { comment(pClass, "TODO(Ravel): record component '$recordComponentName' overrides methods with different new names\n$comment") }
+                write { todo(pClass, "record component '$recordComponentName' overrides methods with different new names\n$comment") }
                 return
             }
 
@@ -263,7 +263,7 @@ open class JavaRemapper : JvmRemapper<PsiJavaFile>({ it as? PsiJavaFile }) {
             if (uniqueNewMemberNames.size != 1) {
                 logger.warn("ambiguous static import, members with name $memberName have different new names")
                 val comment = newMemberNames.map { (k, v) -> "$k -> $v" }.joinToString(separator = "\n")
-                write { comment(pStatement, "TODO(Ravel): ambiguous static import, members with name $memberName have different new names\n$comment") }
+                write { todo(pStatement, "ambiguous static import, members with name $memberName have different new names\n$comment") }
                 return
             }
 

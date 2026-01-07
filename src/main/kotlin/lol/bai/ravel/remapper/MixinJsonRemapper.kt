@@ -37,7 +37,7 @@ class MixinJsonRemapper : JsonRemapper() {
         val newCommonPrefix = newValues.values.commonPrefix()
         if (!newCommonPrefix.endsWith('/')) {
             logger.warn("Does not have a concrete new package name")
-            write { comment(root, "TODO(Ravel): Does not have a concrete package name") }
+            write { todo(root, "Does not have a concrete package name") }
             return@s
         }
 

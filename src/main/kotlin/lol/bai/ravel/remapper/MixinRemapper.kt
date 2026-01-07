@@ -129,7 +129,7 @@ class MixinRemapper : JavaRemapper() {
         if (annotationName == Constant) return@a
 
         fun warnNotLiterals(pElt: PsiElement) {
-            write { comment(pElt, "TODO(Ravel): target not a literal or array of literals") }
+            write { todo(pElt, "target not a literal or array of literals") }
             logger.warn("$className: target not a literal or array of literals")
         }
 
@@ -161,7 +161,7 @@ class MixinRemapper : JavaRemapper() {
             fun putClassTarget(pTarget: PsiClassObjectAccessExpression) {
                 val type = pTarget.operand.type
                 fun warnCantResolve() {
-                    write { comment(pClass, "TODO(Ravel): can not resolve target class ${type.canonicalText}") }
+                    write { todo(pClass, "can not resolve target class ${type.canonicalText}") }
                     logger.warn("$className: can not resolve target class ${type.canonicalText}")
                 }
 
@@ -209,7 +209,7 @@ class MixinRemapper : JavaRemapper() {
         fun targetClassName(pMember: PsiMember): String? {
             val targetClassName = mixinTargets[className].orEmpty()
             if (targetClassName.size != 1) {
-                write { comment(pMember, "TODO(Ravel): Could not determine a single target") }
+                write { todo(pMember, "Could not determine a single target") }
                 logger.warn("$className#${pMember.name}: Could not determine a single target")
                 return null
             }
@@ -256,7 +256,7 @@ class MixinRemapper : JavaRemapper() {
             }
 
             if (targetMethodName == null) {
-                write { comment(pMethod, "TODO(Ravel): No target method") }
+                write { todo(pMethod, "No target method") }
                 logger.warn("$className#$methodName: No target method")
                 return@a
             }
@@ -306,7 +306,7 @@ class MixinRemapper : JavaRemapper() {
             }
 
             if (targetFieldName == null) {
-                write { comment(pMethod, "TODO(Ravel): No target field") }
+                write { todo(pMethod, "No target field") }
                 logger.warn("$className#$methodName: No target field")
                 return@a
             }
@@ -326,7 +326,7 @@ class MixinRemapper : JavaRemapper() {
 
         fun isWildcardOrRegex(pMethod: PsiMethod, target: String): Boolean {
             if (target.contains('*') || target.contains(' ')) {
-                write { comment(pMethod, "TODO(Ravel): wildcard and regex target are not supported") }
+                write { todo(pMethod, "wildcard and regex target are not supported") }
                 logger.warn("$className#${pMethod.name}: wildcard and regex target are not supported")
                 return true
             }
@@ -339,7 +339,7 @@ class MixinRemapper : JavaRemapper() {
 
             val pDesc = pAnnotation.findDeclaredAttributeValue("target")
             if (pDesc != null) {
-                write { comment(pMethod, "TODO(Ravel): target desc is not supported") }
+                write { todo(pMethod, "target desc is not supported") }
                 logger.warn("$className#$methodName: target desc is not supported")
                 return@a
             }
@@ -347,7 +347,7 @@ class MixinRemapper : JavaRemapper() {
             fun remapTargetMethod(pTarget: PsiLiteralExpression) {
                 val targetClassNames = mixinTargets[className].orEmpty()
                 if (targetClassNames.isEmpty()) {
-                    write { comment(pMethod, "TODO(Ravel): no target class") }
+                    write { todo(pMethod, "no target class") }
                     logger.warn("$className#$methodName: no target class")
                     return
                 }
@@ -371,12 +371,12 @@ class MixinRemapper : JavaRemapper() {
                 }
 
                 fun notFound() {
-                    write { comment(pMethod, "TODO(Ravel): target method $targetMethodName with the signature not found") }
+                    write { todo(pMethod, "target method $targetMethodName with the signature not found") }
                     logger.warn("$className#$methodName: target method $targetMethodName not found")
                 }
 
                 fun ambiguous() {
-                    write { comment(pMethod, "TODO(Ravel): target method $targetMethodName is ambiguous") }
+                    write { todo(pMethod, "target method $targetMethodName is ambiguous") }
                     logger.warn("$className#$methodName: target method $targetMethodName is ambiguous")
                 }
 
@@ -421,7 +421,7 @@ class MixinRemapper : JavaRemapper() {
                 if (uniqueNewTargetMethodNames.size != 1) {
                     logger.warn("method target have different new names")
                     val comment = newTargetMethodNames.map { (k, v) -> "  $k -> $v" }.joinToString(separator = "\n")
-                    write { comment(pMethod, "TODO(Ravel): method target have different new names\n$comment") }
+                    write { todo(pMethod, "method target have different new names\n$comment") }
                     return
                 }
 
@@ -445,7 +445,7 @@ class MixinRemapper : JavaRemapper() {
             if (isWildcardOrRegex(pMethod, target)) return
 
             if (!target.contains(':')) {
-                write { comment(pMethod, "TODO(Ravel): target field doesn't have a description") }
+                write { todo(pMethod, "target field doesn't have a description") }
                 logger.warn("$className#${pMethod.name}: target field doesn't have a description")
                 return
             }
@@ -453,7 +453,7 @@ class MixinRemapper : JavaRemapper() {
             var (targetClassName, targetFieldAndDesc) = splitClassMember(target)
             if (targetClassName == null) targetClassName = targetClassName(pMethod)
             if (targetClassName == null) {
-                write { comment(pMethod, "TODO(Ravel): Could not determine target field owner") }
+                write { todo(pMethod, "Could not determine target field owner") }
                 logger.warn("$className#${pMethod.name}: Could not determine target field owner")
                 return
             }
@@ -482,7 +482,7 @@ class MixinRemapper : JavaRemapper() {
             if (isWildcardOrRegex(pMethod, target)) return
 
             if (!target.contains('(')) {
-                write { comment(pMethod, "TODO(Ravel): target method doesn't have a description") }
+                write { todo(pMethod, "target method doesn't have a description") }
                 logger.warn("$className#${pMethod.name}: target method doesn't have a description")
                 return
             }
@@ -490,7 +490,7 @@ class MixinRemapper : JavaRemapper() {
             var (targetClassName, targetMethodAndDesc) = splitClassMember(target)
             if (targetClassName == null) targetClassName = targetClassName(pMethod)
             if (targetClassName == null) {
-                write { comment(pMethod, "TODO(Ravel): Could not determine target method owner") }
+                write { todo(pMethod, "Could not determine target method owner") }
                 logger.warn("$className#${pMethod.name}: Could not determine target method owner")
                 return
             }
@@ -555,13 +555,13 @@ class MixinRemapper : JavaRemapper() {
 
             val pDesc = pAnnotation.findDeclaredAttributeValue("desc")
             if (pDesc != null) {
-                write { comment(pMethod, "TODO(Ravel): @At.desc is not supported") }
+                write { todo(pMethod, "@At.desc is not supported") }
                 logger.warn("$className#$methodName: @At.desc is not supported")
             }
 
             val pArgs = pAnnotation.findDeclaredAttributeValue("args")
             if (pArgs != null) {
-                write { comment(pMethod, "TODO(Ravel): @At.args is not supported") }
+                write { todo(pMethod, "@At.args is not supported") }
                 logger.warn("$className#$methodName: @At.args is not supported")
             }
 
@@ -591,7 +591,7 @@ class MixinRemapper : JavaRemapper() {
                 return@a
             }
 
-            write { comment(pMethod, "TODO(Ravel): Unknown injection point $point") }
+            write { todo(pMethod, "Unknown injection point $point") }
             logger.warn("$className#$methodName: Unknown injection point $point")
             return@a
         }
@@ -602,7 +602,7 @@ class MixinRemapper : JavaRemapper() {
 
             val alias = pAnnotation.findDeclaredAttributeValue("alias")
             if (alias != null) {
-                write { comment(pMember, "TODO(Ravel): @Shadow.alias is not supported") }
+                write { todo(pMember, "@Shadow.alias is not supported") }
                 logger.warn("$className#$memberName: @Shadow.alias is not supported")
                 return@a
             }
@@ -646,7 +646,7 @@ class MixinRemapper : JavaRemapper() {
         }
 
         val pMember = pAnnotation.parent<PsiMember>() ?: pClass
-        write { comment(pMember, "TODO(Ravel): remapper for $annotationName is not implemented") }
+        write { todo(pMember, "remapper for $annotationName is not implemented") }
         logger.warn("$className: remapper for $annotationName is not implemented")
     }
 }
